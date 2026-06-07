@@ -596,7 +596,7 @@ document.getElementById('empIn').addEventListener('keydown',function(e){if(e.key
 
 // ══ LINKS ══
 function buildURL(s){
-  return location.href.split('?')[0]+'?id='+s.id+'_'+todayISO+'&st='+encodeURIComponent(s.name);
+  return location.href.split('?')[0]+'?id='+s.id+'_'+todayISO+'&st='+s.name;
 }
 function saveLinks(){
   stations.forEach(function(s){
@@ -617,20 +617,25 @@ function renderLinks(){
   saveLinks();
   el.innerHTML=stations.map(function(s){
     var url=buildURL(s);
+    // رابط قابل للقراءة — اسم المحطة ظاهر
+    var cleanUrl = location.href.split('?')[0]+'?id='+s.id+'_'+todayISO;
+    var displayUrl = cleanUrl + ' | ' + s.name + ' | ' + s.manager;
     return '<div class="lnk-card">'+
       '<div class="lnk-top">'+
         '<div><div class="lnk-name">'+s.name+'</div>'+
         '<div class="lnk-sub">المدير: '+s.manager+' &ndash; '+s.employees.length+' موظف</div></div>'+
         '<button class="cbtn cbtn-green" onclick="window._copyLink('+s.id+')">نسخ الرابط</button>'+
       '</div>'+
-      '<div class="lnk-url" id="url_'+s.id+'">'+url+'</div>'+
+      '<div style="font-size:11px;color:var(--green);margin-bottom:5px;font-weight:700">'+
+        'الرابط اليومي &ndash; '+s.name+'</div>'+
+      '<div class="lnk-url" id="url_'+s.id+'" data-clean="'+cleanUrl+'">'+cleanUrl+'</div>'+
     '</div>';
   }).join('');
 }
 window._copyLink=function(sid){
   var el=document.getElementById('url_'+sid);
   if(!el)return;
-  var url=el.textContent;
+  var url=el.getAttribute('data-clean')||el.textContent;
   if(navigator.clipboard&&navigator.clipboard.writeText){
     navigator.clipboard.writeText(url).then(function(){toast('تم نسخ الرابط','ok');})
       .catch(function(){fbCopy(url);});
