@@ -596,7 +596,7 @@ document.getElementById('empIn').addEventListener('keydown',function(e){if(e.key
 
 // ══ LINKS ══
 function buildURL(s){
-  return location.href.split('?')[0]+'?id='+s.id+'_'+todayISO;
+  return location.href.split('?')[0]+'?id='+s.id+'_'+todayISO+'&st='+encodeURIComponent(s.name);
 }
 function saveLinks(){
   stations.forEach(function(s){
