@@ -389,11 +389,32 @@ function loadStations(cb){
   });
 }
 function saveStation(s, cb){
-  // upsert
+  // upsert — POST مع merge-duplicates يحدث الموظفين لو موجود
   var h = Object.assign({},SBH,{'Prefer':'resolution=merge-duplicates,return=minimal'});
   fetch(SB_URL+'/rest/v1/stations',{method:'POST',headers:h,body:JSON.stringify({
-    id:s.id, name:s.name, manager:s.manager, employees:s.employees
-  })}).then(function(){if(cb)cb();}).catch(function(){if(cb)cb();});
+    id:s.id, name:s.name, manager:s.manager, employees:s.employees,
+    updated_at: new Date().toISOString()
+  })}).then(function(){
+    // كمان حدّث manager_links عشان الرابط المبعوت يتحدث تلقائي
+    updateManagerLink(s);
+    if(cb)cb();
+  }).catch(function(){if(cb)cb();});
+}
+
+function updateManagerLink(s){
+  // حدّث كل الروابط المبعوتة لهذه المحطة (اليوم وما قبله)
+  var h = Object.assign({},SBH,{'Prefer':'return=minimal'});
+  // جيب كل روابط المحطة دي
+  fetch(SB_URL+'/rest/v1/manager_links?station_name=eq.'+encodeURIComponent(s.name)+'&select=id', {headers:SBH})
+    .then(function(r){return r.ok?r.json():[];})
+    .then(function(rows){
+      rows.forEach(function(row){
+        fetch(SB_URL+'/rest/v1/manager_links?id=eq.'+encodeURIComponent(row.id),{
+          method:'PATCH', headers:h,
+          body:JSON.stringify({employees:s.employees, manager_name:s.manager})
+        }).catch(function(){});
+      });
+    }).catch(function(){});
 }
 function deleteStation(id, cb){
   sbDel('stations','id=eq.'+id).then(function(){if(cb)cb();});
@@ -624,7 +645,11 @@ function renderLinks(){
       '<div class="lnk-top">'+
         '<div><div class="lnk-name">'+s.name+'</div>'+
         '<div class="lnk-sub">المدير: '+s.manager+' &ndash; '+s.employees.length+' موظف</div></div>'+
-        '<button class="cbtn cbtn-green" onclick="window._copyLink('+s.id+')">نسخ الرابط</button>'+
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+          '<button class="cbtn cbtn-green" onclick="window._copyLink('+s.id+')">نسخ الرابط</button>'+
+          '<button class="cbtn" style="background:rgba(245,158,11,.14);color:var(--gold);border:1px solid rgba(245,158,11,.25)" '+
+            'onclick="window._resetLink('+s.id+')">اعادة فتح</button>'+
+        '</div>'+
       '</div>'+
       '<div style="font-size:11px;color:var(--green);margin-bottom:5px;font-weight:700">'+
         'الرابط اليومي &ndash; '+s.name+'</div>'+
@@ -641,6 +666,25 @@ window._copyLink=function(sid){
       .catch(function(){fbCopy(url);});
   } else fbCopy(url);
 };
+window._resetLink = function(sid){
+  var s = stations.find(function(s){return s.id===sid;});
+  if(!s) return;
+  var linkId = s.id+'_'+todayISO;
+  var lockKey = 'lk_'+linkId;
+  // امسح القفل من localStorage (لو مفتوح من نفس الجهاز)
+  localStorage.removeItem(lockKey);
+  // امسح القفل من Supabase عبر حذف وإعادة إنشاء الرابط
+  sbDel('manager_links','id=eq.'+encodeURIComponent(linkId)).then(function(){
+    sbPost('manager_links',{
+      id:linkId,
+      station_name:s.name, manager_name:s.manager,
+      employees:s.employees, created_date:todayISO
+    },'resolution=merge-duplicates,return=minimal').then(function(){
+      toast('تم اعادة فتح الرابط للمدير','ok');
+    });
+  });
+};
+
 function fbCopy(t){
   var ta=document.createElement('textarea');
   ta.value=t;ta.style.cssText='position:fixed;opacity:0;top:0;left:0;width:1px;height:1px';
