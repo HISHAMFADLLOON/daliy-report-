@@ -493,22 +493,23 @@ var shortId = new URLSearchParams(location.search).get('id');
 if(shortId){
   document.getElementById('loginWrap').style.display='none';
   document.getElementById('mgrUI').style.display='block';
-  var lockKey='lk_'+shortId;
-  if(localStorage.getItem(lockKey)){
-    showLocked();
-  } else {
-    document.getElementById('mgrTitle').textContent='جاري التحميل...';
-    document.getElementById('mgrBody').innerHTML='<div class="loading">جاري التحميل...</div>';
-    sbGet('manager_links','id=eq.'+encodeURIComponent(shortId)+'&select=*',function(rows){
-      if(!rows||!rows.length){showLocked('الرابط غير موجود');return;}
-      var lnk=rows[0];
-      showMgr({
-        stationName:lnk.station_name,
-        managerName:lnk.manager_name,
-        employees:Array.isArray(lnk.employees)?lnk.employees:[]
-      },lockKey);
-    });
-  }
+  document.getElementById('mgrTitle').textContent = stName || 'جاري التحميل...';
+  document.getElementById('mgrBody').innerHTML='<div class="loading">جاري التحميل...</div>';
+
+  // تحقق من القفل من Supabase — يشتغل على أي جهاز
+  sbGet('manager_links','id=eq.'+encodeURIComponent(shortId)+'&select=*',function(rows){
+    if(!rows||!rows.length){showLocked('الرابط غير موجود');return;}
+    var lnk=rows[0];
+    // لو used_date = اليوم يعني اتسجل — مقفول على أي جهاز
+    if(lnk.used_date === todayISO){
+      showLocked(); return;
+    }
+    showMgr({
+      stationName: lnk.station_name,
+      managerName: lnk.manager_name,
+      employees:   Array.isArray(lnk.employees)?lnk.employees:[]
+    }, shortId);
+  });
 } else if(isLoggedIn()){
   document.getElementById('loginWrap').style.display='none';
   document.getElementById('adminUI').style.display='block';
@@ -840,8 +841,7 @@ function showMgr(info,lockKey){
         method:'PATCH', headers:h2,
         body:JSON.stringify({used_date: todayISO})
       }).catch(function(){});
-      // كمان احفظ محلي كـ backup
-      localStorage.setItem('lk_'+lockKey, '1');
+
       document.getElementById('mgrBody').innerHTML=
         '<div class="cs"><div class="cs-icon">&#10003;</div>'+
         '<div class="cs-title">تم ارسال التقرير</div>'+
