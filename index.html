@@ -334,6 +334,7 @@ input[type=date]:focus{border-color:var(--blue);}
     <div class="row">
       <input type="text" id="inSt"  placeholder="اسم المحطة">
       <input type="text" id="inMgr" placeholder="اسم المدير">
+      <input type="text" id="inCode" placeholder="كود المدير (اختياري)">
       <button class="btn btn-blue" id="addStBtn">+</button>
     </div>
     <div class="sec" style="margin-top:24px">المحطات المضافة</div>
@@ -436,7 +437,7 @@ var SB_URL    = 'https://plvjfmkbcmulfubiiwyw.supabase.co';
 var SB_KEY    = 'sb_publishable_L6fcrQBAOsJv9Wh04wP7ww_h0Xxsl0H';
 var BOT_TOKEN = '8910031215:AAFUya-l3VyoXAOMlvxd4zb6DpUGFhiDEw8';
 var CHAT_ID   = '870811910';
-var USERS     = [{u:'admin',p:'admin123'},{u:'hisham',p:'1234'}];
+// USERS are now stored in Supabase app_users table
 var SBH       = {'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY};
 
 var stations  = [];
@@ -492,7 +493,7 @@ function saveStation(s){
   var h=Object.assign({},SBH,{'Prefer':'resolution=merge-duplicates,return=minimal'});
   fetch(SB_URL+'/rest/v1/stations',{method:'POST',headers:h,body:JSON.stringify({
     id:s.id,name:s.name,manager:s.manager,employees:s.employees,
-    updated_at:new Date().toISOString()
+    manager_code:s.manager_code||'',updated_at:new Date().toISOString()
   })}).then(function(){updateManagerLink(s);}).catch(function(){});
 }
 function updateManagerLink(s){
@@ -518,16 +519,23 @@ document.getElementById('logoutBtn').addEventListener('click',function(){localSt
 function doLogin(){
   var u=document.getElementById('lUser').value.trim();
   var p=document.getElementById('lPass').value;
-  var ok=USERS.some(function(x){return x.u===u&&x.p===p;});
-  if(ok){
-    localStorage.setItem('att_sess','1');
-    document.getElementById('loginWrap').style.display='none';
-    document.getElementById('adminUI').style.display='block';
-    initAdmin();
-  } else {
-    document.getElementById('lErr').textContent='اسم المستخدم او كلمة المرور غلط';
-    document.getElementById('lPass').value='';
-  }
+  if(!u||!p){toast('ادخل اسم المستخدم وكلمة المرور','warn');return;}
+  var btn=document.getElementById('loginBtn');
+  btn.textContent='جاري التحقق...';btn.disabled=true;
+  // تحقق من Supabase
+  sbGet('app_users','username=eq.'+encodeURIComponent(u)+'&password=eq.'+encodeURIComponent(p)+'&select=username,role',function(rows){
+    btn.textContent='دخول';btn.disabled=false;
+    if(rows&&rows.length){
+      localStorage.setItem('att_sess','1');
+      localStorage.setItem('att_user',u);
+      document.getElementById('loginWrap').style.display='none';
+      document.getElementById('adminUI').style.display='block';
+      initAdmin();
+    } else {
+      document.getElementById('lErr').textContent='اسم المستخدم او كلمة المرور غلط';
+      document.getElementById('lPass').value='';
+    }
+  });
 }
 
 // ── BOOT ──
@@ -547,7 +555,8 @@ if(shortId){
     showMgr({
       stationName:lnk.station_name,
       managerName:lnk.manager_name,
-      employees:Array.isArray(lnk.employees)?lnk.employees:[]
+      employees:Array.isArray(lnk.employees)?lnk.employees:[],
+      managerCode:lnk.manager_code||''
     },shortId);
   });
 } else if(isLoggedIn()){
@@ -597,11 +606,13 @@ document.getElementById('addStBtn').addEventListener('click',addStation);
 function addStation(){
   var n=document.getElementById('inSt').value.trim();
   var m=document.getElementById('inMgr').value.trim();
+  var c=document.getElementById('inCode').value.trim();
   if(!n||!m){toast('ادخل اسم المحطة والمدير','warn');return;}
-  var s={id:Date.now(),name:n,manager:m,employees:[]};
+  var s={id:Date.now(),name:n,manager:m,employees:[],manager_code:c};
   stations.push(s); saveStation(s); renderSt();
   document.getElementById('inSt').value='';
   document.getElementById('inMgr').value='';
+  document.getElementById('inCode').value='';
   toast('تمت اضافة المحطة','ok');
 }
 function delStation(id){
@@ -668,12 +679,13 @@ document.getElementById('addEmpBtn').addEventListener('click',addEmp);
 document.getElementById('empIn').addEventListener('keydown',function(e){if(e.key==='Enter')addEmp();});
 
 // ── LINKS ──
-function buildURL(s){return location.href.split('?')[0]+'?id='+s.id+'_'+todayISO+'&st='+s.name;}
+function buildURL(s){return location.href.split('?')[0]+'?id='+s.id+'_'+todayISO;}
 function saveLinks(){
   stations.forEach(function(s){
     sbPost('manager_links',{
       id:s.id+'_'+todayISO,station_name:s.name,manager_name:s.manager,
-      employees:s.employees,created_date:todayISO
+      employees:s.employees,created_date:todayISO,
+      manager_code:s.manager_code||''
     },'resolution=merge-duplicates,return=minimal');
   });
 }
@@ -747,6 +759,39 @@ function showMgr(info,lockKey){
   document.getElementById('mgrTitle').textContent=info.stationName;
   document.getElementById('mgrSub').textContent='المدير: '+info.managerName;
   document.title=info.stationName+' - تسجيل الحضور';
+
+  // تحقق من كود المدير لو موجود
+  if(info.managerCode){
+    document.getElementById('mgrBody').innerHTML=
+      '<div class="mgr-wrap">'+
+        '<div class="ip">'+
+          '<div class="ip-station">'+info.stationName+'</div>'+
+          '<div class="ip-mgr">المدير: '+info.managerName+'</div>'+
+        '</div>'+
+        '<div style="margin-bottom:12px;font-size:14px;color:var(--muted)">ادخل الكود السري للمدير للمتابعة</div>'+
+        '<input type="password" id="mgrCodeInput" class="p-note" style="display:block;font-size:15px;padding:13px;margin-bottom:12px" placeholder="الكود السري">'+
+        '<button class="sub-btn" id="mgrCodeBtn">تحقق &#8594;</button>'+
+      '</div>';
+    document.getElementById('mgrCodeBtn').addEventListener('click',function(){
+      var entered=document.getElementById('mgrCodeInput').value.trim();
+      if(entered===info.managerCode){
+        showMgrForm(info,lockKey);
+      } else {
+        toast('الكود غلط','err');
+        document.getElementById('mgrCodeInput').value='';
+        document.getElementById('mgrCodeInput').focus();
+      }
+    });
+    document.getElementById('mgrCodeInput').addEventListener('keydown',function(e){
+      if(e.key==='Enter') document.getElementById('mgrCodeBtn').click();
+    });
+    setTimeout(function(){document.getElementById('mgrCodeInput').focus();},100);
+    return;
+  }
+  showMgrForm(info,lockKey);
+}
+
+function showMgrForm(info,lockKey){
   var people=info.employees.indexOf(info.managerName)!==-1?info.employees:[info.managerName].concat(info.employees);
   var total=people.length;
   var att={};
