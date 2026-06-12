@@ -18,8 +18,4 @@ jobs:
           node-version: '20'
 
       - name: Run notification script
-        env:
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          CHAT_ID: ${{ secrets.CHAT_ID }}
         run: node notify.js
