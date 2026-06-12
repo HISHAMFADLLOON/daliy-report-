@@ -2,9 +2,8 @@ name: Daily Attendance Notification
 
 on:
   schedule:
-    # كل يوم الساعة 1 ظهر UTC = 3 مساءً Cairo (UTC+2)
-    - cron: '0 13 * * *'
-  workflow_dispatch:
+    - cron: '0 13 * * *'  # كل يوم الساعة 1 ظهر UTC = 3 مساءً Cairo
+  workflow_dispatch:      # لتشغيل يدوي للتجربة
 
 jobs:
   notify:
