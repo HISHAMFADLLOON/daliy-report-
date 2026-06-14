@@ -14,36 +14,77 @@ jobs:
           curl -s "${{ secrets.SB_URL }}/rest/v1/attendance?select=*&order=created_at.asc" \
             -H "apikey: ${{ secrets.SB_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SB_KEY }}" \
-            -o attendance_backup.json
+            -o attendance.json
 
       - name: Fetch stations
         run: |
           curl -s "${{ secrets.SB_URL }}/rest/v1/stations?select=*" \
             -H "apikey: ${{ secrets.SB_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SB_KEY }}" \
-            -o stations_backup.json
+            -o stations.json
 
       - name: Fetch manager_links
         run: |
           curl -s "${{ secrets.SB_URL }}/rest/v1/manager_links?select=*" \
             -H "apikey: ${{ secrets.SB_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SB_KEY }}" \
-            -o links_backup.json
+            -o links.json
+
+      - name: Install dependencies
+        run: pip install pandas openpyxl
+
+      - name: Convert to Excel
+        run: |
+          python3 << 'EOF'
+          import json, pandas as pd
+
+          # attendance
+          with open('attendance.json', encoding='utf-8') as f:
+              att = json.load(f)
+          rows = []
+          for r in att:
+              for e in (r.get('employees') or []):
+                  rows.append({
+                      'التاريخ': r.get('report_date'),
+                      'الوقت': r.get('report_time'),
+                      'المحطة': r.get('station'),
+                      'المدير': r.get('manager'),
+                      'الموظف': e.get('name'),
+                      'الحالة': e.get('status'),
+                      'ملاحظة': e.get('note', '')
+                  })
+          df_att = pd.DataFrame(rows)
+
+          # stations
+          with open('stations.json', encoding='utf-8') as f:
+              sts = json.load(f)
+          df_st = pd.DataFrame([{
+              'المحطة': s.get('name'),
+              'المدير': s.get('manager'),
+              'عدد الموظفين': len(s.get('employees') or []),
+              'الموظفين': ', '.join(s.get('employees') or [])
+          } for s in sts])
+
+          # links
+          with open('links.json', encoding='utf-8') as f:
+              lnk = json.load(f)
+          df_lnk = pd.DataFrame([{
+              'المحطة': l.get('station_name'),
+              'المدير': l.get('manager_name'),
+              'تاريخ الانشاء': l.get('created_date'),
+              'مستخدم؟': l.get('used_date') or 'لا'
+          } for l in lnk])
+
+          with pd.ExcelWriter('backup.xlsx', engine='openpyxl') as writer:
+              df_att.to_excel(writer, sheet_name='الحضور', index=False)
+              df_st.to_excel(writer, sheet_name='المحطات', index=False)
+              df_lnk.to_excel(writer, sheet_name='الروابط', index=False)
+          EOF
 
       - name: Send to Telegram
         run: |
           DATE=$(date +"%Y-%m-%d")
-          curl -s -F document=@attendance_backup.json \
+          curl -s -F document=@backup.xlsx \
             -F chat_id="${{ secrets.CHAT_ID }}" \
-            -F caption="نسخة احتياطية - الحضور - $DATE" \
-            "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument"
-
-          curl -s -F document=@stations_backup.json \
-            -F chat_id="${{ secrets.CHAT_ID }}" \
-            -F caption="نسخة احتياطية - المحطات - $DATE" \
-            "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument"
-
-          curl -s -F document=@links_backup.json \
-            -F chat_id="${{ secrets.CHAT_ID }}" \
-            -F caption="نسخة احتياطية - الروابط - $DATE" \
+            -F caption="نسخة احتياطية كاملة - $DATE" \
             "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument"
