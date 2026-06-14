@@ -1,0 +1,17 @@
+name: Keep Supabase Alive
+
+on:
+  schedule:
+    - cron: '13 9 */3 * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase
+        run: |
+          curl -s -o /dev/null -w "%{http_code}\n" \
+            "${{ secrets.SB_URL }}/rest/v1/stations?select=id&limit=1" \
+            -H "apikey: ${{ secrets.SB_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SB_KEY }}"
