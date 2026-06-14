@@ -1,0 +1,18 @@
+name: Cleanup Old Manager Links
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'   # كل أحد الساعة 2 صباحًا UTC
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete links older than 7 days
+        run: |
+          CUTOFF=$(date -d "-7 days" +%Y-%m-%d)
+          curl -s -X DELETE \
+            "${{ secrets.SB_URL }}/rest/v1/manager_links?created_date=lt.$CUTOFF" \
+            -H "apikey: ${{ secrets.SB_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SB_KEY }}"
