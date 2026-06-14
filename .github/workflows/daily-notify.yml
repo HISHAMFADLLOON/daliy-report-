@@ -2,7 +2,7 @@ name: Daily Attendance Notification
 
 on:
   schedule:
-    - cron: '0 13 * * *'
+    - cron: '40 8 * * *'   # 8:40 UTC = 11:40 صباحًا القاهرة (يصل قريب من 12 ظهرًا)
   workflow_dispatch:
 
 jobs:
