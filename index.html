@@ -403,6 +403,7 @@ input[type=date]:focus{border-color:var(--blue);}
     <div class="export-row">
       <button class="btn btn-green" id="expDayBtn">&#128196; تصدير اليوم Excel</button>
       <button class="btn btn-blue"  id="expMonBtn">&#128197; تصدير الشهر Excel</button>
+      <button class="btn btn-ghost" style="grid-column:1/-1" id="auditBtn">&#128203; سجل التدقيق</button>
       <button class="btn btn-red btn-del" id="delAllBtn">&#128465; حذف السجلات المعروضة</button>
     </div>
     <div id="recList"></div>
@@ -494,6 +495,18 @@ input[type=date]:focus{border-color:var(--blue);}
   </div>
 </div>
 
+<!-- AUDIT LOG MODAL -->
+<div class="ov" id="auditOv">
+  <div class="modal" style="max-width:420px">
+    <h3>&#128203; سجل التدقيق</h3>
+    <p>آخر 50 عملية في النظام</p>
+    <div id="auditRows" style="max-height:60vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="closeAuditBtn">اغلاق</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -561,6 +574,12 @@ function sbDel(table,q){
     .then(function(r){return r.ok;}).catch(function(){return false;});
 }
 
+// ── AUDIT LOG ──
+function logAudit(action,details){
+  var u=localStorage.getItem('att_user')||'?';
+  sbPost('audit_log',{username:u,action:action,details:details});
+}
+
 // ── STATIONS ──
 function loadStations(cb){
   sbGet('stations','select=*&order=id.asc',function(rows){
@@ -617,6 +636,7 @@ function doLogin(){
         if(role){
           localStorage.setItem('att_sess','1');
           localStorage.setItem('att_user',u);
+          localStorage.setItem('att_role',role);
           document.getElementById('loginWrap').style.display='none';
           document.getElementById('adminUI').style.display='block';
           initAdmin();
@@ -662,6 +682,10 @@ function initAdmin(){
   loadStations(renderSt);
   setupTabs();
   setupRecordsBtns();
+  if(localStorage.getItem('att_role')!=='admin'){
+    var ab=document.getElementById('auditBtn');
+    if(ab)ab.style.display='none';
+  }
 }
 
 // ── LOCKED ──
@@ -704,6 +728,7 @@ function addStation(){
   if(!n||!m){toast('ادخل اسم المحطة والمدير','warn');return;}
   var s={id:Date.now(),name:n,manager:m,employees:[],manager_code:c};
   stations.push(s); saveStation(s); renderSt();
+  logAudit('اضافة محطة',n+' - المدير: '+m);
   document.getElementById('inSt').value='';
   document.getElementById('inMgr').value='';
   document.getElementById('inCode').value='';
@@ -711,8 +736,10 @@ function addStation(){
 }
 function delStation(id){
   if(!confirm('حذف المحطة وكل بياناتها؟'))return;
+  var s=stations.find(function(x){return x.id===id;});
   stations=stations.filter(function(s){return s.id!==id;});
   delStationDB(id); renderSt();
+  if(s)logAudit('حذف محطة',s.name);
 }
 function toggleSt(id){var el=document.getElementById('sc'+id);if(el)el.classList.toggle('open');}
 function renderSt(){
@@ -758,11 +785,15 @@ window._saveCode=function(sid){
   var val=input.value.trim();
   s.manager_code=val;
   saveStation(s);
+  logAudit('تعديل كود المدير',s.name+' - '+(val?'تم تعيين كود':'تمت ازالة الكود'));
   toast(val?'تم حفظ كود المدير':'تم إزالة الكود — المدير يدخل بدون كود','ok');
 };
 window._delEmp=function(sid,idx){
   var s=stations.find(function(s){return s.id===sid;});
-  if(!s)return; s.employees.splice(idx,1); saveStation(s); renderSt();
+  if(!s)return;
+  var name=s.employees[idx];
+  s.employees.splice(idx,1); saveStation(s); renderSt();
+  logAudit('حذف موظف',name+' - محطة: '+s.name);
 };
 
 // ── EMPLOYEES ──
@@ -781,6 +812,7 @@ function addEmp(){
   if(!s)return;
   if(s.employees.indexOf(n)!==-1){toast('الاسم موجود','warn');return;}
   s.employees.push(n); saveStation(s); renderSt();
+  logAudit('اضافة موظف',n+' - محطة: '+s.name);
   document.getElementById('empIn').value='';
   document.getElementById('empIn').focus();
   toast('تمت الاضافة','ok');
@@ -1056,6 +1088,30 @@ function setupRecordsBtns(){
     if(!confirm('حذف '+data.length+' تقرير؟ لا يمكن التراجع.'))return;
     var done=0;
     data.forEach(function(r){sbDel('attendance','id=eq.'+r.id).then(function(){done++;if(done===data.length)loadByDate();});});
+    logAudit('حذف جماعي للتقارير',data.length+' تقرير - '+(filterSt==='all'?'كل المحطات':filterSt)+' - تاريخ: '+(document.getElementById('dateInput').value||todayISO));
+  });
+  document.getElementById('auditBtn').addEventListener('click',openAuditLog);
+  document.getElementById('closeAuditBtn').addEventListener('click',function(){
+    document.getElementById('auditOv').classList.remove('open');
+  });
+}
+
+function openAuditLog(){
+  document.getElementById('auditOv').classList.add('open');
+  var el=document.getElementById('auditRows');
+  el.innerHTML='<div class="loading">&#9203; جاري التحميل...</div>';
+  sbGet('audit_log','select=*&order=created_at.desc&limit=50',function(rows){
+    if(!rows||!rows.length){el.innerHTML='<div class="empty"><div class="ei">&#128203;</div><p>لا توجد عمليات مسجلة بعد</p></div>';return;}
+    el.innerHTML=rows.map(function(r){
+      var dt=new Date(r.created_at).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'});
+      return '<div class="edit-row" style="flex-direction:column;align-items:stretch;gap:4px">'+
+        '<div style="display:flex;justify-content:space-between;gap:8px">'+
+          '<span class="edit-name">'+(r.username||'?')+' &ndash; '+r.action+'</span>'+
+          '<span style="font-size:11px;color:var(--muted);white-space:nowrap">'+dt+'</span>'+
+        '</div>'+
+        (r.details?'<div style="font-size:12px;color:var(--muted)">'+r.details+'</div>':'')+
+      '</div>';
+    }).join('');
   });
 }
 function loadToday(){document.getElementById('dateInput').value=todayISO;loadByDate();}
@@ -1109,8 +1165,12 @@ function renderRecs(){
 window._setF=function(v){filterSt=v;renderRecs();};
 window._delRec=function(id){
   if(!confirm('حذف هذا التقرير؟'))return;
+  var r=records.find(function(x){return x.id===id;});
   sbDel('attendance','id=eq.'+id).then(function(ok){
-    if(ok){records=records.filter(function(r){return r.id!==id;});renderRecs();toast('تم الحذف','ok');}
+    if(ok){
+      records=records.filter(function(r){return r.id!==id;});renderRecs();toast('تم الحذف','ok');
+      if(r)logAudit('حذف تقرير',r.station+' - '+r.manager+' - '+r.report_date+' '+r.report_time);
+    }
     else toast('فشل الحذف','err');
   });
 };
@@ -1155,6 +1215,7 @@ document.getElementById('saveEditBtn').addEventListener('click',function(){
       document.getElementById('editOv').classList.remove('open');
       renderRecs();
       toast('تم تعديل التقرير','ok');
+      logAudit('تعديل تقرير',r.station+' - '+r.manager+' - '+r.report_date+' '+r.report_time);
     } else toast('فشل الحفظ — تأكد من الاتصال','err');
   });
 });
