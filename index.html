@@ -385,6 +385,9 @@ input[type=date]:focus{border-color:var(--blue);}
       <button class="btn btn-blue"  id="searchBtn">بحث</button>
       <button class="btn btn-ghost" id="todayBtn">اليوم</button>
     </div>
+    <div class="row" style="margin-bottom:12px">
+      <input type="text" id="empSearch" placeholder="&#128269; بحث باسم الموظف">
+    </div>
     <div class="chips" id="filterChips"></div>
     <div class="export-row">
       <button class="btn btn-green" id="expDayBtn">&#128196; تصدير اليوم Excel</button>
@@ -398,6 +401,14 @@ input[type=date]:focus{border-color:var(--blue);}
   <div class="view" id="view-stats">
     <div class="info-box ib-blue">
       &#128200; نسبة الحضور لكل موظف خلال شهر <span id="statsMonth"></span>
+    </div>
+    <div class="stat-station" id="statsChartCard" style="display:none">
+      <div class="stat-station-hdr">
+        <div class="stat-station-name">اتجاه الحضور اليومي (نسبة %)</div>
+      </div>
+      <div style="position:relative;height:200px">
+        <canvas id="statsChart"></canvas>
+      </div>
     </div>
     <div id="statsBox"><div class="loading">&#9203; جاري التحميل...</div></div>
   </div>
@@ -488,6 +499,8 @@ var SBH       = {'Content-Type':'application/json','apikey':SB_KEY,'Authorizatio
 var stations  = [];
 var records   = [];
 var filterSt  = 'all';
+var searchEmp = '';
+var statsChartInstance = null;
 var activeStId = null;
 var todayISO  = new Date().toISOString().split('T')[0];
 
@@ -942,6 +955,10 @@ function showMgrForm(info,lockKey){
 function setupRecordsBtns(){
   document.getElementById('searchBtn').addEventListener('click',loadByDate);
   document.getElementById('todayBtn').addEventListener('click',loadToday);
+  document.getElementById('empSearch').addEventListener('input',function(){
+    searchEmp=this.value.trim();
+    renderRecs();
+  });
   document.getElementById('expDayBtn').addEventListener('click',function(){
     var date=document.getElementById('dateInput').value||todayISO;
     if(!records.length){toast('اضغط بحث اولا','warn');return;}
@@ -983,11 +1000,23 @@ function renderRecs(){
     '<button class="chip '+(filterSt==='all'?'on':'')+'" onclick="window._setF(\'all\')">الكل</button>'+
     stArr.map(function(n){return '<button class="chip '+(filterSt===n?'on':'')+'" onclick="window._setF(\''+n.replace(/'/g,"\\'")+'\')">'+n+'</button>';}).join('');
   var data=filterSt==='all'?records:records.filter(function(r){return r.station===filterSt;});
+  if(searchEmp){
+    data=data.filter(function(r){
+      return (r.employees||[]).some(function(e){return e.name.indexOf(searchEmp)!==-1;});
+    });
+  }
   var el=document.getElementById('recList');
-  if(!data.length){el.innerHTML='<div class="empty"><div class="ei">&#128220;</div><p>لا توجد سجلات في هذا اليوم</p></div>';return;}
+  if(!data.length){
+    el.innerHTML='<div class="empty"><div class="ei">&#128220;</div><p>'+
+      (searchEmp?'لا توجد نتائج لبحثك':'لا توجد سجلات في هذا اليوم')+'</p></div>';
+    return;
+  }
   var pm={'حاضر':'pill-p','راحة':'pill-r','عطلة':'pill-h','مرضي':'pill-m','اجازة':'pill-v','انقطاع':'pill-a'};
   el.innerHTML=data.map(function(r){
-    var pills=(r.employees||[]).map(function(e){return '<div class="pill '+(pm[e.status]||'pill-p')+'">'+e.name+': '+e.status+(e.note?' ('+e.note+')':'')+' </div>';}).join('');
+    var pills=(r.employees||[]).map(function(e){
+      var hl=searchEmp&&e.name.indexOf(searchEmp)!==-1?'outline:2px solid var(--blue);':'';
+      return '<div class="pill '+(pm[e.status]||'pill-p')+'" style="'+hl+'">'+e.name+': '+e.status+(e.note?' ('+e.note+')':'')+' </div>';
+    }).join('');
     return '<div class="rec-card">'+
       '<div class="rec-head"><div>'+
         '<div class="rec-mgr">'+r.manager+'</div>'+
@@ -1127,17 +1156,35 @@ function loadStats(){
   document.getElementById('statsMonth').textContent=now.toLocaleDateString('ar-EG',{month:'long',year:'numeric'});
   el.innerHTML='<div class="loading">&#9203; جاري التحميل...</div>';
   sbGet('attendance','report_date_iso=gte.'+y+'-'+m+'-01&report_date_iso=lte.'+y+'-'+m+'-'+String(last).padStart(2,'0')+'&order=created_at.asc&limit=2000',function(data){
-    if(!data.length){el.innerHTML='<div class="empty"><div class="ei">&#128200;</div><p>لا توجد بيانات لهذا الشهر بعد</p></div>';return;}
+    if(!data.length){
+      el.innerHTML='<div class="empty"><div class="ei">&#128200;</div><p>لا توجد بيانات لهذا الشهر بعد</p></div>';
+      document.getElementById('statsChartCard').style.display='none';
+      return;
+    }
 
     var dataMap={};
+    var dayMap={};
     data.forEach(function(r){
       if(!dataMap[r.station])dataMap[r.station]={};
+      if(!dayMap[r.report_date_iso])dayMap[r.report_date_iso]={present:0,total:0};
       (r.employees||[]).forEach(function(e){
         if(!dataMap[r.station][e.name])dataMap[r.station][e.name]={present:0,total:0};
         dataMap[r.station][e.name].total++;
-        if(e.status==='حاضر')dataMap[r.station][e.name].present++;
+        dayMap[r.report_date_iso].total++;
+        if(e.status==='حاضر'){
+          dataMap[r.station][e.name].present++;
+          dayMap[r.report_date_iso].present++;
+        }
       });
     });
+
+    var sortedDays=Object.keys(dayMap).sort();
+    var chartLabels=sortedDays.map(function(d){return d.split('-')[2];});
+    var chartData=sortedDays.map(function(d){
+      var dd=dayMap[d];
+      return dd.total?Math.round(dd.present/dd.total*100):0;
+    });
+    renderStatsChart(chartLabels,chartData);
 
     var sts=stations.length?stations:Object.keys(dataMap).map(function(n){
       return {name:n,manager:'',employees:Object.keys(dataMap[n]||{})};
@@ -1176,6 +1223,43 @@ function loadStats(){
   });
 }
 
+function renderStatsChart(labels,data){
+  var card=document.getElementById('statsChartCard');
+  var canvas=document.getElementById('statsChart');
+  if(!card||!canvas)return;
+  if(typeof Chart==='undefined'||!labels.length){card.style.display='none';return;}
+  card.style.display='block';
+  if(statsChartInstance){statsChartInstance.destroy();statsChartInstance=null;}
+  var muted=getComputedStyle(document.body).getPropertyValue('--muted').trim()||'#888';
+  var border=getComputedStyle(document.body).getPropertyValue('--border').trim()||'rgba(255,255,255,.07)';
+  var blue=getComputedStyle(document.body).getPropertyValue('--blue').trim()||'#3b82f6';
+  statsChartInstance=new Chart(canvas.getContext('2d'),{
+    type:'line',
+    data:{
+      labels:labels,
+      datasets:[{
+        label:'نسبة الحضور %',
+        data:data,
+        borderColor:blue,
+        backgroundColor:blue+'26',
+        fill:true,
+        tension:.3,
+        pointRadius:3,
+        pointBackgroundColor:blue
+      }]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      scales:{
+        y:{min:0,max:100,ticks:{color:muted,callback:function(v){return v+'%';}},grid:{color:border}},
+        x:{ticks:{color:muted},grid:{color:border}}
+      },
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.parsed.y+'%';}}}}
+    }
+  });
+}
+
 // ── TOAST ──
 function toast(msg,type){
   var t=document.getElementById('toast');
@@ -1186,5 +1270,6 @@ function toast(msg,type){
 })();
 </script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 </body>
 </html>
