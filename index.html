@@ -804,7 +804,7 @@ function renderLinks(){
           '</div>'+
           '<div class="lnk-btns">'+
             '<button class="cbtn cbtn-green" onclick="window._copyLink('+s.id+')">نسخ الرابط</button>'+
-            '<button class="cbtn cbtn-gold"  onclick="window._resetLink('+s.id+')">اعادة فتح</button>'+
+            '<button class="cbtn cbtn-gold"  onclick="window._regenLink('+s.id+')">&#128260; اعادة انشاء الرابط</button>'+
           '</div>'+
         '</div>'+
         '<div class="lnk-label">الرابط اليومي &ndash; '+s.name+'</div>'+
@@ -829,14 +829,18 @@ function fbCopy(t){
   catch(e){toast('اضغط مطولا على الرابط وانسخه','warn');}
   document.body.removeChild(ta);
 }
-window._resetLink=function(sid){
+window._regenLink=function(sid){
   var s=stations.find(function(s){return s.id===sid;});if(!s)return;
   var linkId=s.id+'_'+todayISO;
-  sbPatch('manager_links','id=eq.'+encodeURIComponent(linkId),{used_date:null})
-    .then(function(ok){
-      if(ok)toast('تم اعادة فتح الرابط للمدير','ok');
-      else toast('فشل — تأكد من الاتصال','err');
-    });
+  var h=Object.assign({},SBH,{'Prefer':'resolution=merge-duplicates,return=minimal'});
+  fetch(SB_URL+'/rest/v1/manager_links',{method:'POST',headers:h,body:JSON.stringify({
+    id:linkId,station_name:s.name,manager_name:s.manager,
+    employees:s.employees,created_date:todayISO,
+    manager_code:s.manager_code||'',used_date:null
+  })}).then(function(r){
+    if(r.ok){toast('تم تحديث الرابط وفتحه للمدير','ok');}
+    else toast('فشل — تأكد من الاتصال','err');
+  }).catch(function(){toast('فشل — تأكد من الاتصال','err');});
 };
 
 // ── MANAGER UI ──
@@ -890,8 +894,8 @@ function showMgrForm(info,lockKey){
   var total=people.length;
   var att={};
   var dateStr=new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  var cardsHTML=people.map(function(name){
-    var isMgr=name===info.managerName;
+
+  function buildCard(name,isMgr){
     var btns=STATUSES.map(function(s){
       return '<button class="sb '+s.cls+'" id="sb_'+CSS.escape(name)+'_'+s.key+
         '" onclick="window._mAtt(\''+name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\',\''+s.key+'\')">'+s.key+'</button>';
@@ -901,7 +905,12 @@ function showMgrForm(info,lockKey){
       '<div class="p-btns">'+btns+'</div>'+
       '<input class="p-note" id="pn_'+CSS.escape(name)+'" placeholder="ملاحظة (اختياري)">'+
     '</div>';
+  }
+
+  var cardsHTML=people.map(function(name){
+    return buildCard(name,name===info.managerName);
   }).join('');
+
   document.getElementById('mgrBody').innerHTML=
     '<div class="mgr-wrap">'+
       '<div class="ip">'+
@@ -910,8 +919,12 @@ function showMgrForm(info,lockKey){
         '<div class="ip-date">'+dateStr+'</div>'+
       '</div>'+
       '<div class="prog-bar"><div class="prog-fill" id="pf" style="width:0%"></div></div>'+
-      '<div class="prog-lbl">سجلت <span id="dc">0</span> من '+total+' شخص</div>'+
-      cardsHTML+
+      '<div class="prog-lbl">سجلت <span id="dc">0</span> من <span id="totalCount">'+total+'</span> شخص</div>'+
+      '<div id="peopleList">'+cardsHTML+'</div>'+
+      '<div class="row" style="margin:4px 0 14px">'+
+        '<input type="text" id="newPersonInput" placeholder="&#10133; اضافة شخص غير موجود بالقائمة">'+
+        '<button class="btn btn-blue" id="addPersonBtn">اضافة</button>'+
+      '</div>'+
       '<button class="sub-btn" id="subBtn">&#10003; ارسال التقرير</button>'+
     '</div>';
 
@@ -930,6 +943,24 @@ function showMgrForm(info,lockKey){
     document.getElementById('dc').textContent=done;
     document.getElementById('pf').style.width=Math.round(done/total*100)+'%';
   };
+
+  function addPerson(){
+    var input=document.getElementById('newPersonInput');
+    var name=input.value.trim();
+    if(!name)return;
+    if(people.indexOf(name)!==-1){toast('الاسم موجود بالفعل','warn');return;}
+    people.push(name);
+    total=people.length;
+    document.getElementById('peopleList').insertAdjacentHTML('beforeend',buildCard(name,false));
+    document.getElementById('totalCount').textContent=total;
+    document.getElementById('pf').style.width=Math.round(Object.keys(att).length/total*100)+'%';
+    input.value='';
+    input.focus();
+    var card=document.getElementById('pr_'+CSS.escape(name));
+    if(card)card.scrollIntoView({behavior:'smooth',block:'center'});
+  }
+  document.getElementById('addPersonBtn').addEventListener('click',addPerson);
+  document.getElementById('newPersonInput').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();addPerson();}});
 
   document.getElementById('subBtn').addEventListener('click',function(){
     var missing=people.filter(function(n){return !att[n];});
