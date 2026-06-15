@@ -166,6 +166,21 @@ input[type=date]:focus{border-color:var(--blue);}
 .stat-n.b{color:var(--blue);} .stat-n.g{color:var(--gold);} .stat-n.gr{color:var(--green);}
 .stat-l{font-size:11px;color:var(--muted);margin-top:3px;}
 
+/* MONTHLY STATS TAB */
+.stat-station{background:var(--card);border:1.5px solid var(--border);border-radius:16px;
+  padding:16px 17px;margin-bottom:12px;box-shadow:0 2px 8px var(--shadow);}
+.stat-station-hdr{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:13px;}
+.stat-station-name{font-size:15px;font-weight:900;}
+.stat-station-avg{font-size:12px;font-weight:700;color:var(--muted);}
+.stat-emp-row{margin-bottom:11px;}
+.stat-emp-row:last-child{margin-bottom:0;}
+.stat-emp-top{display:flex;justify-content:space-between;align-items:baseline;
+  font-size:13px;margin-bottom:5px;}
+.stat-emp-name{font-weight:700;}
+.stat-emp-pct{font-weight:900;font-size:13px;}
+.stat-bar{background:var(--border);border-radius:20px;height:8px;overflow:hidden;}
+.stat-bar-fill{height:100%;border-radius:20px;transition:width .4s;}
+
 /* CHIPS */
 .chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-bottom:14px;}
 .chips::-webkit-scrollbar{display:none;}
@@ -265,6 +280,14 @@ input[type=date]:focus{border-color:var(--blue);}
 .modal-foot{display:flex;gap:8px;margin-top:14px;}
 .modal-foot .btn{flex:1;padding:12px;border-radius:11px;}
 
+/* EDIT REPORT MODAL */
+.edit-row{display:flex;justify-content:space-between;align-items:center;
+  background:var(--bg);border:1.5px solid var(--border);border-radius:10px;
+  padding:10px 12px;margin-bottom:8px;}
+.edit-name{font-size:13px;font-weight:700;}
+.edit-sel{background:var(--card);border:1.5px solid var(--border);border-radius:8px;
+  color:var(--text);font-family:'Cairo',sans-serif;font-size:12px;padding:6px 8px;outline:none;}
+
 /* TOAST */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(70px);
   padding:12px 26px;border-radius:30px;font-weight:900;font-size:14px;z-index:500;
@@ -326,6 +349,7 @@ input[type=date]:focus{border-color:var(--blue);}
     <button class="tab on" id="tab-stations">&#127979; المحطات</button>
     <button class="tab"    id="tab-links">&#128279; الروابط</button>
     <button class="tab"    id="tab-records">&#128202; السجلات</button>
+    <button class="tab"    id="tab-stats">&#128200; احصائيات</button>
   </div>
 
   <!-- STATIONS -->
@@ -368,6 +392,14 @@ input[type=date]:focus{border-color:var(--blue);}
       <button class="btn btn-red btn-del" id="delAllBtn">&#128465; حذف السجلات المعروضة</button>
     </div>
     <div id="recList"></div>
+  </div>
+
+  <!-- STATS -->
+  <div class="view" id="view-stats">
+    <div class="info-box ib-blue">
+      &#128200; نسبة الحضور لكل موظف خلال شهر <span id="statsMonth"></span>
+    </div>
+    <div id="statsBox"><div class="loading">&#9203; جاري التحميل...</div></div>
   </div>
 
   <div class="footer">
@@ -423,6 +455,19 @@ input[type=date]:focus{border-color:var(--blue);}
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" id="closeEmpBtn">اغلاق</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT REPORT MODAL -->
+<div class="ov" id="editOv">
+  <div class="modal">
+    <h3>تعديل التقرير</h3>
+    <p id="editOvSub"></p>
+    <div id="editRows"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="closeEditBtn">اغلاق</button>
+      <button class="btn btn-blue"  id="saveEditBtn">حفظ التعديل</button>
     </div>
   </div>
 </div>
@@ -516,25 +561,34 @@ document.getElementById('lPass').addEventListener('keydown',function(e){if(e.key
 document.getElementById('lUser').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('lPass').focus();});
 document.getElementById('logoutBtn').addEventListener('click',function(){localStorage.removeItem('att_sess');location.reload();});
 
+function sha256(text){
+  var enc=new TextEncoder().encode(text);
+  return crypto.subtle.digest('SHA-256',enc).then(function(buf){
+    return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+  });
+}
+
 function doLogin(){
   var u=document.getElementById('lUser').value.trim();
   var p=document.getElementById('lPass').value;
   if(!u||!p){toast('ادخل اسم المستخدم وكلمة المرور','warn');return;}
   var btn=document.getElementById('loginBtn');
   btn.textContent='جاري التحقق...';btn.disabled=true;
-  // تحقق من Supabase
-  sbGet('app_users','username=eq.'+encodeURIComponent(u)+'&password=eq.'+encodeURIComponent(p)+'&select=username,role',function(rows){
-    btn.textContent='دخول';btn.disabled=false;
-    if(rows&&rows.length){
-      localStorage.setItem('att_sess','1');
-      localStorage.setItem('att_user',u);
-      document.getElementById('loginWrap').style.display='none';
-      document.getElementById('adminUI').style.display='block';
-      initAdmin();
-    } else {
-      document.getElementById('lErr').textContent='اسم المستخدم او كلمة المرور غلط';
-      document.getElementById('lPass').value='';
-    }
+  // تحقق من Supabase باستخدام password_hash (SHA-256)
+  sha256(p).then(function(hash){
+    sbGet('app_users','username=eq.'+encodeURIComponent(u)+'&password_hash=eq.'+hash+'&select=username,role',function(rows){
+      btn.textContent='دخول';btn.disabled=false;
+      if(rows&&rows.length){
+        localStorage.setItem('att_sess','1');
+        localStorage.setItem('att_user',u);
+        document.getElementById('loginWrap').style.display='none';
+        document.getElementById('adminUI').style.display='block';
+        initAdmin();
+      } else {
+        document.getElementById('lErr').textContent='اسم المستخدم او كلمة المرور غلط';
+        document.getElementById('lPass').value='';
+      }
+    });
   });
 }
 
@@ -586,7 +640,8 @@ function setupTabs(){
   var tabs=[
     {btn:'tab-stations',view:'view-stations',fn:renderSt},
     {btn:'tab-links',   view:'view-links',   fn:renderLinks},
-    {btn:'tab-records', view:'view-records', fn:loadToday}
+    {btn:'tab-records', view:'view-records', fn:loadToday},
+    {btn:'tab-stats',   view:'view-stats',   fn:loadStats}
   ];
   tabs.forEach(function(t){
     document.getElementById(t.btn).addEventListener('click',function(){
@@ -932,7 +987,10 @@ function renderRecs(){
         '<div class="rec-mgr">'+r.manager+'</div>'+
         '<div class="rec-st">'+r.station+'</div>'+
         '<div class="rec-dt">'+r.report_date+' &ndash; '+r.report_time+'</div>'+
-      '</div><button class="rec-del" onclick="window._delRec('+r.id+')">حذف</button></div>'+
+      '</div><div style="display:flex;gap:6px;flex-shrink:0">'+
+        '<button class="rec-del" style="background:rgba(59,130,246,.1);border-color:rgba(59,130,246,.2);color:var(--blue)" onclick="window._editRec('+r.id+')">تعديل</button>'+
+        '<button class="rec-del" onclick="window._delRec('+r.id+')">حذف</button>'+
+      '</div></div>'+
       '<div class="pills">'+pills+'</div></div>';
   }).join('');
 }
@@ -944,6 +1002,50 @@ window._delRec=function(id){
     else toast('فشل الحذف','err');
   });
 };
+
+// ── EDIT RECORD ──
+var activeEditId=null;
+window._editRec=function(id){
+  var r=records.find(function(x){return x.id===id;});
+  if(!r)return;
+  activeEditId=id;
+  document.getElementById('editOvSub').textContent=r.station+' - '+r.manager+' - '+r.report_date+' '+r.report_time;
+  var optsHTML=STATUSES.map(function(s){return '<option value="'+s.key+'">'+s.key+'</option>';}).join('');
+  document.getElementById('editRows').innerHTML=(r.employees||[]).map(function(e,i){
+    return '<div class="edit-row">'+
+      '<div class="edit-name">'+e.name+'</div>'+
+      '<select class="edit-sel" id="editSel_'+i+'">'+optsHTML+'</select>'+
+    '</div>';
+  }).join('');
+  (r.employees||[]).forEach(function(e,i){
+    var sel=document.getElementById('editSel_'+i);
+    if(sel)sel.value=e.status;
+  });
+  document.getElementById('editOv').classList.add('open');
+};
+document.getElementById('closeEditBtn').addEventListener('click',function(){
+  document.getElementById('editOv').classList.remove('open');
+});
+document.getElementById('saveEditBtn').addEventListener('click',function(){
+  var r=records.find(function(x){return x.id===activeEditId;});
+  if(!r)return;
+  var emps=(r.employees||[]).map(function(e,i){
+    var sel=document.getElementById('editSel_'+i);
+    var newStatus=sel?sel.value:e.status;
+    return {name:e.name,status:newStatus,note:(newStatus!=='حاضر')?(e.note||''):''};
+  });
+  var btn=document.getElementById('saveEditBtn');
+  btn.disabled=true;btn.textContent='جاري الحفظ...';
+  sbPatch('attendance','id=eq.'+activeEditId,{employees:emps}).then(function(ok){
+    btn.disabled=false;btn.textContent='حفظ التعديل';
+    if(ok){
+      r.employees=emps;
+      document.getElementById('editOv').classList.remove('open');
+      renderRecs();
+      toast('تم تعديل التقرير','ok');
+    } else toast('فشل الحفظ — تأكد من الاتصال','err');
+  });
+});
 
 // ── EXCEL ──
 function buildExcel(data,dateLabel,isMonth){
@@ -1009,6 +1111,63 @@ function buildExcel(data,dateLabel,isMonth){
   a.download=fname;a.style.display='none';
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   toast('تم تصدير Excel','ok');
+}
+
+// ── MONTHLY STATS ──
+function loadStats(){
+  var el=document.getElementById('statsBox');if(!el)return;
+  var now=new Date(),y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,'0');
+  var last=new Date(y,now.getMonth()+1,0).getDate();
+  document.getElementById('statsMonth').textContent=now.toLocaleDateString('ar-EG',{month:'long',year:'numeric'});
+  el.innerHTML='<div class="loading">&#9203; جاري التحميل...</div>';
+  sbGet('attendance','report_date_iso=gte.'+y+'-'+m+'-01&report_date_iso=lte.'+y+'-'+m+'-'+String(last).padStart(2,'0')+'&order=created_at.asc&limit=2000',function(data){
+    if(!data.length){el.innerHTML='<div class="empty"><div class="ei">&#128200;</div><p>لا توجد بيانات لهذا الشهر بعد</p></div>';return;}
+
+    var dataMap={};
+    data.forEach(function(r){
+      if(!dataMap[r.station])dataMap[r.station]={};
+      (r.employees||[]).forEach(function(e){
+        if(!dataMap[r.station][e.name])dataMap[r.station][e.name]={present:0,total:0};
+        dataMap[r.station][e.name].total++;
+        if(e.status==='حاضر')dataMap[r.station][e.name].present++;
+      });
+    });
+
+    var sts=stations.length?stations:Object.keys(dataMap).map(function(n){
+      return {name:n,manager:'',employees:Object.keys(dataMap[n]||{})};
+    });
+
+    el.innerHTML=sts.map(function(s){
+      var sd=dataMap[s.name]||{};
+      var pp=(s.employees||[]).indexOf(s.manager)!==-1?(s.employees||[]):[s.manager].concat(s.employees||[]).filter(Boolean);
+      if(!pp.length)pp=Object.keys(sd);
+      if(!pp.length)return '';
+
+      var totalPresent=0,totalAll=0;
+      var rowsHTML=pp.map(function(name){
+        var ed=sd[name]||{present:0,total:0};
+        totalPresent+=ed.present;totalAll+=ed.total;
+        var pct=ed.total?Math.round(ed.present/ed.total*100):0;
+        var color=pct>=90?'var(--green)':pct>=75?'var(--gold)':'var(--red)';
+        return '<div class="stat-emp-row">'+
+          '<div class="stat-emp-top">'+
+            '<span class="stat-emp-name">'+name+'</span>'+
+            '<span class="stat-emp-pct" style="color:'+color+'">'+pct+'% ('+ed.present+'/'+ed.total+')</span>'+
+          '</div>'+
+          '<div class="stat-bar"><div class="stat-bar-fill" style="width:'+pct+'%;background:'+color+'"></div></div>'+
+        '</div>';
+      }).join('');
+
+      var avgPct=totalAll?Math.round(totalPresent/totalAll*100):0;
+      return '<div class="stat-station">'+
+        '<div class="stat-station-hdr">'+
+          '<div class="stat-station-name">'+s.name+'</div>'+
+          '<div class="stat-station-avg">متوسط الحضور: '+avgPct+'%</div>'+
+        '</div>'+
+        rowsHTML+
+      '</div>';
+    }).join('');
+  });
 }
 
 // ── TOAST ──
