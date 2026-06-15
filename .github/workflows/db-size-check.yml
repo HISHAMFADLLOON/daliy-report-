@@ -1,0 +1,40 @@
+name: Database Size Check
+
+on:
+  schedule:
+    - cron: '0 9 1 * *'   # أول كل شهر الساعة 9 صباحًا UTC (12 ظهرًا القاهرة)
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check database size
+        run: |
+          RESULT=$(curl -s "${{ secrets.SB_URL }}/rest/v1/rpc/get_db_size" \
+            -H "apikey: ${{ secrets.SB_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SB_KEY }}" \
+            -H "Content-Type: application/json" \
+            -X POST)
+          SIZE_BYTES=$(echo $RESULT | tr -d '"')
+          SIZE_MB=$(echo "scale=2; $SIZE_BYTES / 1048576" | bc)
+          PERCENT=$(echo "scale=1; $SIZE_MB * 100 / 500" | bc)
+          echo "Size: ${SIZE_MB}MB (${PERCENT}%)"
+
+          MSG="📊 تقرير حجم قاعدة البيانات الشهري
+          ━━━━━━━━━━━━━━
+          الحجم الحالي: ${SIZE_MB} MB
+          النسبة المستخدمة: ${PERCENT}%
+          الحد المجاني: 500 MB"
+
+          if (( $(echo "$PERCENT > 80" | bc -l) )); then
+            MSG="⚠️ تحذير: قاعدة البيانات وصلت ${PERCENT}% من الحد المجاني!
+          ━━━━━━━━━━━━━━
+          الحجم الحالي: ${SIZE_MB} MB
+          الحد المجاني: 500 MB
+          ⚡ يُنصح بحذف السجلات القديمة أو الترقية"
+          fi
+
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "{\"chat_id\":\"${{ secrets.CHAT_ID }}\",\"text\":\"$MSG\"}"
