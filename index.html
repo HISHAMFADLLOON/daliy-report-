@@ -4,6 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>نظام الحضور</title>
+
+<!-- PWA -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" id="themeColorMeta" content="#07101e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="نظام الحضور">
+<link rel="icon" href="./icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="./icon-180.png">
+
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
 
@@ -510,6 +521,8 @@ function applyTheme(){
   document.body.classList.toggle('light', !isDark);
   var btns = document.querySelectorAll('.theme-btn');
   btns.forEach(function(b){ b.textContent = isDark ? '☀️' : '🌙'; });
+  var tc = document.getElementById('themeColorMeta');
+  if(tc) tc.setAttribute('content', isDark ? '#07101e' : '#f0f4f8');
 }
 function toggleTheme(){
   isDark = !isDark;
@@ -519,6 +532,13 @@ function toggleTheme(){
 applyTheme();
 document.getElementById('themeBtn').addEventListener('click', toggleTheme);
 document.getElementById('themeBtnMgr').addEventListener('click', toggleTheme);
+
+// ── PWA: SERVICE WORKER ──
+if('serviceWorker' in navigator){
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('./sw.js').catch(function(){});
+  });
+}
 
 // ── SUPABASE ──
 function sbGet(table,q,cb){
