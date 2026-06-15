@@ -574,21 +574,27 @@ function doLogin(){
   if(!u||!p){toast('ادخل اسم المستخدم وكلمة المرور','warn');return;}
   var btn=document.getElementById('loginBtn');
   btn.textContent='جاري التحقق...';btn.disabled=true;
-  // تحقق من Supabase باستخدام password_hash (SHA-256)
+  // تحقق من Supabase عن طريق دالة verify_login (جدول app_users مقفول بالكامل)
   sha256(p).then(function(hash){
-    sbGet('app_users','username=eq.'+encodeURIComponent(u)+'&password_hash=eq.'+hash+'&select=username,role',function(rows){
-      btn.textContent='دخول';btn.disabled=false;
-      if(rows&&rows.length){
-        localStorage.setItem('att_sess','1');
-        localStorage.setItem('att_user',u);
-        document.getElementById('loginWrap').style.display='none';
-        document.getElementById('adminUI').style.display='block';
-        initAdmin();
-      } else {
-        document.getElementById('lErr').textContent='اسم المستخدم او كلمة المرور غلط';
-        document.getElementById('lPass').value='';
-      }
-    });
+    fetch(SB_URL+'/rest/v1/rpc/verify_login',{method:'POST',headers:SBH,
+      body:JSON.stringify({p_username:u,p_hash:hash})})
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(role){
+        btn.textContent='دخول';btn.disabled=false;
+        if(role){
+          localStorage.setItem('att_sess','1');
+          localStorage.setItem('att_user',u);
+          document.getElementById('loginWrap').style.display='none';
+          document.getElementById('adminUI').style.display='block';
+          initAdmin();
+        } else {
+          document.getElementById('lErr').textContent='اسم المستخدم او كلمة المرور غلط';
+          document.getElementById('lPass').value='';
+        }
+      }).catch(function(){
+        btn.textContent='دخول';btn.disabled=false;
+        document.getElementById('lErr').textContent='تأكد من الاتصال بالانترنت';
+      });
   });
 }
 
