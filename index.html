@@ -580,7 +580,7 @@ function updateManagerLink(s){
     rows.forEach(function(row){
       fetch(SB_URL+'/rest/v1/manager_links?id=eq.'+encodeURIComponent(row.id),{
         method:'PATCH',headers:h,
-        body:JSON.stringify({employees:s.employees,manager_name:s.manager})
+        body:JSON.stringify({employees:s.employees,manager_name:s.manager,manager_code:s.manager_code||''})
       }).catch(function(){});
     });
   });
@@ -739,11 +739,27 @@ function renderSt(){
           '<div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:8px">الموظفون ('+s.employees.length+')</div>'+
           '<div class="emp-list">'+empHTML+
             '<button class="btn btn-ghost" style="padding:5px 11px;font-size:12px" onclick="window._openEmpOv('+s.id+',\''+s.name.replace(/'/g,"\\'")+'\')">+ موظف</button>'+
+          '</div></div>'+
+        '<div style="margin-top:13px">'+
+          '<div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:8px">كود المدير السري (اختياري &ndash; بدونه يدخل المدير بدون كود)</div>'+
+          '<div class="row">'+
+            '<input type="text" id="code_'+s.id+'" placeholder="مثال: 1234" value="'+(s.manager_code||'').replace(/"/g,'&quot;')+'">'+
+            '<button class="btn btn-blue" onclick="window._saveCode('+s.id+')">حفظ</button>'+
           '</div></div></div></div>';
   }).join('');
 }
 window._toggleSt=toggleSt;
 window._delStation=delStation;
+window._saveCode=function(sid){
+  var s=stations.find(function(s){return s.id===sid;});
+  if(!s)return;
+  var input=document.getElementById('code_'+sid);
+  if(!input)return;
+  var val=input.value.trim();
+  s.manager_code=val;
+  saveStation(s);
+  toast(val?'تم حفظ كود المدير':'تم إزالة الكود — المدير يدخل بدون كود','ok');
+};
 window._delEmp=function(sid,idx){
   var s=stations.find(function(s){return s.id===sid;});
   if(!s)return; s.employees.splice(idx,1); saveStation(s); renderSt();
@@ -805,6 +821,7 @@ function renderLinks(){
           '<div class="lnk-btns">'+
             '<button class="cbtn cbtn-green" onclick="window._copyLink('+s.id+')">نسخ الرابط</button>'+
             '<button class="cbtn cbtn-gold"  onclick="window._regenLink('+s.id+')">&#128260; اعادة انشاء الرابط</button>'+
+            '<button class="cbtn cbtn-gold"  onclick="window._resetLink('+s.id+')">&#128275; اعادة فتح</button>'+
           '</div>'+
         '</div>'+
         '<div class="lnk-label">الرابط اليومي &ndash; '+s.name+'</div>'+
@@ -841,6 +858,15 @@ window._regenLink=function(sid){
     if(r.ok){toast('تم تحديث الرابط وفتحه للمدير','ok');}
     else toast('فشل — تأكد من الاتصال','err');
   }).catch(function(){toast('فشل — تأكد من الاتصال','err');});
+};
+window._resetLink=function(sid){
+  var s=stations.find(function(s){return s.id===sid;});if(!s)return;
+  var linkId=s.id+'_'+todayISO;
+  sbPatch('manager_links','id=eq.'+encodeURIComponent(linkId),{used_date:null})
+    .then(function(ok){
+      if(ok)toast('تم اعادة فتح الرابط للمدير','ok');
+      else toast('فشل — تأكد من الاتصال','err');
+    });
 };
 
 // ── MANAGER UI ──
