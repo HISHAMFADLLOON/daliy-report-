@@ -338,6 +338,17 @@ input[type=date]:focus{border-color:var(--blue);}
   font-size:13px;font-weight:700;cursor:pointer;margin-bottom:16px;transition:all .2s;}
 .dash-refresh:hover{border-color:var(--blue);color:var(--blue);}
 
+/* COMPARE */
+.cmp-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
+.cmp-col{background:var(--card);border:1.5px solid var(--border);border-radius:14px;padding:12px;}
+.cmp-title{font-size:13px;font-weight:900;margin-bottom:10px;color:var(--blue);}
+.cmp-row{display:flex;justify-content:space-between;font-size:12px;padding:4px 0;
+  border-bottom:1px solid var(--border);}
+.cmp-row:last-child{border-bottom:none;}
+.cmp-name{font-weight:700;}
+.cmp-status{font-size:11px;font-weight:700;}
+.cmp-same{color:var(--green);} .cmp-diff{color:var(--red);}
+
 .empty{text-align:center;padding:48px 20px;color:var(--muted);}
 .empty .ei{font-size:44px;margin-bottom:10px;}
 .loading{text-align:center;padding:32px;color:var(--muted);font-size:14px;}
@@ -410,26 +421,56 @@ input[type=date]:focus{border-color:var(--blue);}
 
   <!-- RECORDS -->
   <div class="view" id="view-records">
+    <!-- إحصاء سريع -->
     <div class="stats">
       <div class="stat"><div class="stat-n b" id="sN">0</div><div class="stat-l">تقارير</div></div>
       <div class="stat"><div class="stat-n g" id="sT">0</div><div class="stat-l">محطات</div></div>
       <div class="stat"><div class="stat-n gr" id="sS">0</div><div class="stat-l">موظفين</div></div>
     </div>
-    <div class="row" style="margin-bottom:12px">
+    <!-- إحصاء الحالات السريع -->
+    <div class="stats" id="statusStats" style="display:none">
+      <div class="stat"><div class="stat-n" style="color:var(--green)" id="ssP">0</div><div class="stat-l">حاضر</div></div>
+      <div class="stat"><div class="stat-n" style="color:var(--gold)" id="ssR">0</div><div class="stat-l">راحة</div></div>
+      <div class="stat"><div class="stat-n" style="color:var(--red)" id="ssA">0</div><div class="stat-l">انقطاع</div></div>
+    </div>
+    <!-- بحث بالتاريخ -->
+    <div class="row" style="margin-bottom:8px">
       <input type="date" id="dateInput">
       <button class="btn btn-blue"  id="searchBtn">بحث</button>
       <button class="btn btn-ghost" id="todayBtn">اليوم</button>
     </div>
-    <div class="row" style="margin-bottom:12px">
+    <!-- مقارنة يومين -->
+    <div class="row" style="margin-bottom:12px;align-items:center">
+      <input type="date" id="cmpDate1" style="flex:1">
+      <span style="color:var(--muted);font-size:13px;white-space:nowrap">مقارنة مع</span>
+      <input type="date" id="cmpDate2" style="flex:1">
+      <button class="btn btn-ghost" id="cmpBtn">&#128260;</button>
+    </div>
+    <!-- بحث بالاسم -->
+    <div class="row" style="margin-bottom:8px">
       <input type="text" id="empSearch" placeholder="&#128269; بحث باسم الموظف">
+    </div>
+    <!-- فلترة بالحالة -->
+    <div class="chips" id="statusChips" style="margin-bottom:8px">
+      <button class="chip on" onclick="window._setStatus('all')">الكل</button>
+      <button class="chip" onclick="window._setStatus('حاضر')">✅ حاضر</button>
+      <button class="chip" onclick="window._setStatus('انقطاع')">❌ انقطاع</button>
+      <button class="chip" onclick="window._setStatus('مرضي')">🏥 مرضي</button>
+      <button class="chip" onclick="window._setStatus('اجازة')">🌴 اجازة</button>
+      <button class="chip" onclick="window._setStatus('راحة')">☕ راحة</button>
+      <button class="chip" onclick="window._setStatus('عطلة')">🎉 عطلة</button>
     </div>
     <div class="chips" id="filterChips"></div>
     <div class="export-row">
-      <button class="btn btn-green" id="expDayBtn">&#128196; تصدير اليوم Excel</button>
-      <button class="btn btn-blue"  id="expMonBtn">&#128197; تصدير الشهر Excel</button>
+      <button class="btn btn-green" id="expDayBtn">&#128196; Excel اليوم</button>
+      <button class="btn btn-blue"  id="expMonBtn">&#128197; Excel الشهر</button>
+      <button class="btn btn-ghost" id="expPdfBtn">&#128209; PDF اليوم</button>
+      <button class="btn btn-ghost" id="copyRptBtn">&#128203; نسخ للواتساب</button>
       <button class="btn btn-ghost" style="grid-column:1/-1" id="auditBtn">&#128203; سجل التدقيق</button>
       <button class="btn btn-red btn-del" id="delAllBtn">&#128465; حذف السجلات المعروضة</button>
     </div>
+    <!-- منطقة المقارنة -->
+    <div id="cmpBox" style="display:none"></div>
     <div id="recList"></div>
   </div>
 
@@ -547,6 +588,7 @@ var SBH       = {'Content-Type':'application/json','apikey':SB_KEY,'Authorizatio
 var stations  = [];
 var records   = [];
 var filterSt  = 'all';
+var filterStatus = 'all';
 var searchEmp = '';
 var statsChartInstance = null;
 var activeStId = null;
@@ -1162,12 +1204,39 @@ function showMgrForm(info,lockKey){
 
 // ── RECORDS ──
 function setupRecordsBtns(){
-  document.getElementById('searchBtn').addEventListener('click',loadByDate);
-  document.getElementById('todayBtn').addEventListener('click',loadToday);
-  document.getElementById('empSearch').addEventListener('input',function(){
-    searchEmp=this.value.trim();
-    renderRecs();
+  document.getElementById('searchBtn').addEventListener('click',function(){
+    document.getElementById('cmpBox').style.display='none';
+    loadByDate();
   });
+  document.getElementById('todayBtn').addEventListener('click',function(){
+    document.getElementById('cmpBox').style.display='none';
+    loadToday();
+  });
+  document.getElementById('empSearch').addEventListener('input',function(){
+    searchEmp=this.value.trim(); renderRecs();
+  });
+
+  // مقارنة يومين
+  document.getElementById('cmpBtn').addEventListener('click',function(){
+    var d1=document.getElementById('cmpDate1').value;
+    var d2=document.getElementById('cmpDate2').value;
+    if(!d1||!d2){toast('اختار التاريخين للمقارنة','warn');return;}
+    if(d1===d2){toast('اختار يومين مختلفين','warn');return;}
+    loadCompare(d1,d2);
+  });
+
+  // تصدير PDF
+  document.getElementById('expPdfBtn').addEventListener('click',function(){
+    if(!records.length){toast('اضغط بحث اولا','warn');return;}
+    buildPDF(records,document.getElementById('dateInput').value||todayISO);
+  });
+
+  // نسخ للواتساب
+  document.getElementById('copyRptBtn').addEventListener('click',function(){
+    if(!records.length){toast('اضغط بحث اولا','warn');return;}
+    copyReport(records,document.getElementById('dateInput').value||todayISO);
+  });
+
   document.getElementById('expDayBtn').addEventListener('click',function(){
     var date=document.getElementById('dateInput').value||todayISO;
     if(!records.length){toast('اضغط بحث اولا','warn');return;}
@@ -1196,6 +1265,112 @@ function setupRecordsBtns(){
   });
 }
 
+// ── COMPARE ──
+function loadCompare(d1,d2){
+  document.getElementById('cmpBox').style.display='block';
+  document.getElementById('cmpBox').innerHTML='<div class="loading">&#9203; جاري تحميل المقارنة...</div>';
+  var fetched={};
+  function tryRender(){
+    if(!fetched[d1]||!fetched[d2])return;
+    var data1=fetched[d1],data2=fetched[d2];
+    var map1={},map2={};
+    data1.forEach(function(r){
+      (r.employees||[]).forEach(function(e){
+        if(!map1[r.station])map1[r.station]={};
+        map1[r.station][e.name]=e.status;
+      });
+    });
+    data2.forEach(function(r){
+      (r.employees||[]).forEach(function(e){
+        if(!map2[r.station])map2[r.station]={};
+        map2[r.station][e.name]=e.status;
+      });
+    });
+    var allSt=Array.from(new Set(Object.keys(map1).concat(Object.keys(map2))));
+    var html='<div class="sec">مقارنة '+d1+' مع '+d2+'</div>';
+    allSt.forEach(function(st){
+      var emps=new Set(Object.keys(map1[st]||{}).concat(Object.keys(map2[st]||{})));
+      var rows=Array.from(emps).map(function(name){
+        var s1=(map1[st]||{})[name]||'—';
+        var s2=(map2[st]||{})[name]||'—';
+        var cls=s1===s2?'cmp-same':'cmp-diff';
+        return '<div class="cmp-row"><span class="cmp-name">'+name+'</span>'+
+          '<span class="cmp-status '+cls+'">'+s1+' ← '+s2+'</span></div>';
+      }).join('');
+      html+='<div class="stat-station" style="margin-bottom:12px">'+
+        '<div class="stat-station-hdr"><div class="stat-station-name">'+st+'</div></div>'+
+        rows+'</div>';
+    });
+    document.getElementById('cmpBox').innerHTML=html||'<div class="empty"><div class="ei">📊</div><p>لا توجد بيانات للمقارنة</p></div>';
+  }
+  sbGet('attendance','report_date_iso=eq.'+d1+'&order=created_at.desc&limit=500',function(data){fetched[d1]=data;tryRender();});
+  sbGet('attendance','report_date_iso=eq.'+d2+'&order=created_at.desc&limit=500',function(data){fetched[d2]=data;tryRender();});
+}
+
+// ── PDF ──
+function buildPDF(data,dateLabel){
+  if(!data||!data.length){toast('لا توجد بيانات','warn');return;}
+  var now=new Date();
+  var pm={'حاضر':'✅','راحة':'☕','عطلة':'🎉','مرضي':'🏥','اجازة':'🌴','انقطاع':'❌'};
+  var html='<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8">'+
+    '<style>body{font-family:Arial,sans-serif;padding:20px;color:#111;direction:rtl}'+
+    'h1{font-size:18px;margin-bottom:4px}'+
+    '.sub{font-size:13px;color:#666;margin-bottom:20px}'+
+    'table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px}'+
+    'th{background:#3b82f6;color:#fff;padding:8px 10px;text-align:right}'+
+    'td{padding:7px 10px;border-bottom:1px solid #eee}'+
+    'tr:nth-child(even){background:#f8faff}'+
+    '.station{font-size:15px;font-weight:bold;margin:16px 0 6px;color:#3b82f6}'+
+    '.footer{font-size:11px;color:#aaa;margin-top:30px;text-align:center}'+
+    '@media print{button{display:none}}'+
+    '</style></head><body>'+
+    '<button onclick="window.print()" style="margin-bottom:16px;padding:8px 18px;background:#3b82f6;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px">🖨️ طباعة</button>'+
+    '<h1>تقرير الحضور</h1>'+
+    '<div class="sub">'+dateLabel+' — تم التصدير: '+now.toLocaleString('ar-EG')+'</div>';
+
+  var stMap={};
+  data.forEach(function(r){
+    if(!stMap[r.station])stMap[r.station]={manager:r.manager,time:r.report_time,emps:[]};
+    (r.employees||[]).forEach(function(e){stMap[r.station].emps.push(e);});
+  });
+
+  Object.keys(stMap).forEach(function(st){
+    var info=stMap[st];
+    html+='<div class="station">'+st+' — المدير: '+info.manager+' — '+info.time+'</div>'+
+      '<table><tr><th>الموظف</th><th>الحالة</th><th>ملاحظة</th></tr>'+
+      info.emps.map(function(e){
+        return '<tr><td>'+e.name+'</td><td>'+(pm[e.status]||'')+' '+e.status+'</td><td>'+(e.note||'—')+'</td></tr>';
+      }).join('')+'</table>';
+  });
+
+  html+='<div class="footer">Powered by Hisham Fadloun — نظام تسجيل الحضور</div></body></html>';
+  var win=window.open('','_blank');
+  if(win){win.document.write(html);win.document.close();}
+  else toast('السماح بالنوافذ المنبثقة في المتصفح','warn');
+}
+
+// ── نسخ للواتساب ──
+function copyReport(data,dateLabel){
+  var pm={'حاضر':'✅','راحة':'☕','عطلة':'🎉','مرضي':'🏥','اجازة':'🌴','انقطاع':'❌'};
+  var txt='📋 تقرير الحضور\n'+dateLabel+'\n━━━━━━━━━━━━\n';
+  var stMap={};
+  data.forEach(function(r){
+    if(!stMap[r.station])stMap[r.station]={manager:r.manager,emps:[]};
+    (r.employees||[]).forEach(function(e){stMap[r.station].emps.push(e);});
+  });
+  Object.keys(stMap).forEach(function(st){
+    var info=stMap[st];
+    txt+='\n🏢 '+st+'\n👤 المدير: '+info.manager+'\n';
+    info.emps.forEach(function(e){
+      txt+=(pm[e.status]||'')+'  '+e.name+': '+e.status+(e.note?' ('+e.note+')':'')+'\n';
+    });
+    txt+='─────────────\n';
+  });
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(function(){toast('تم النسخ — الصقه في الواتساب','ok');}).catch(function(){fbCopy(txt);});
+  } else fbCopy(txt);
+}
+
 function openAuditLog(){
   document.getElementById('auditOv').classList.add('open');
   var el=document.getElementById('auditRows');
@@ -1219,7 +1394,7 @@ function loadByDate(){
   var date=document.getElementById('dateInput').value||todayISO;
   document.getElementById('recList').innerHTML='<div class="loading">&#9203; جاري التحميل...</div>';
   sbGet('attendance','report_date_iso=eq.'+encodeURIComponent(date)+'&order=created_at.desc&limit=500',function(data){
-    records=data;filterSt='all';renderRecs();
+    records=data;filterSt='all';filterStatus='all';renderRecs();
   });
 }
 function renderRecs(){
@@ -1228,25 +1403,65 @@ function renderRecs(){
   document.getElementById('sN').textContent=records.length;
   document.getElementById('sT').textContent=stSet.size;
   document.getElementById('sS').textContent=empSet.size;
+
+  // إحصاء سريع للحالات
+  var cntP=0,cntR=0,cntA=0,cntM=0,cntV=0,cntH=0;
+  records.forEach(function(r){(r.employees||[]).forEach(function(e){
+    if(e.status==='حاضر')cntP++;
+    else if(e.status==='راحة')cntR++;
+    else if(e.status==='انقطاع')cntA++;
+    else if(e.status==='مرضي')cntM++;
+    else if(e.status==='اجازة')cntV++;
+    else if(e.status==='عطلة')cntH++;
+  });});
+  var ss=document.getElementById('statusStats');
+  if(ss&&(cntP||cntR||cntA||cntM||cntV||cntH)){
+    ss.style.display='grid';
+    document.getElementById('ssP').textContent=cntP;
+    document.getElementById('ssR').textContent=cntR;
+    document.getElementById('ssA').textContent=cntA;
+  }
+
+  // تحديث chips الحالة
+  var statusChips=document.getElementById('statusChips');
+  if(statusChips){
+    statusChips.querySelectorAll('.chip').forEach(function(c){
+      c.classList.toggle('on',c.getAttribute('onclick')==="window._setStatus('"+filterStatus+"')"||
+        (filterStatus==='all'&&c.getAttribute('onclick')==="window._setStatus('all')"));
+    });
+  }
+
   var stArr=Array.from(stSet);
   document.getElementById('filterChips').innerHTML=
     '<button class="chip '+(filterSt==='all'?'on':'')+'" onclick="window._setF(\'all\')">الكل</button>'+
     stArr.map(function(n){return '<button class="chip '+(filterSt===n?'on':'')+'" onclick="window._setF(\''+n.replace(/'/g,"\\'")+'\')">'+n+'</button>';}).join('');
+
   var data=filterSt==='all'?records:records.filter(function(r){return r.station===filterSt;});
+
+  // فلترة بالاسم
   if(searchEmp){
     data=data.filter(function(r){
       return (r.employees||[]).some(function(e){return e.name.indexOf(searchEmp)!==-1;});
     });
   }
+
+  // فلترة بالحالة
+  if(filterStatus!=='all'){
+    data=data.filter(function(r){
+      return (r.employees||[]).some(function(e){return e.status===filterStatus;});
+    });
+  }
+
   var el=document.getElementById('recList');
   if(!data.length){
     el.innerHTML='<div class="empty"><div class="ei">&#128220;</div><p>'+
-      (searchEmp?'لا توجد نتائج لبحثك':'لا توجد سجلات في هذا اليوم')+'</p></div>';
+      (searchEmp||filterStatus!=='all'?'لا توجد نتائج':'لا توجد سجلات في هذا اليوم')+'</p></div>';
     return;
   }
   var pm={'حاضر':'pill-p','راحة':'pill-r','عطلة':'pill-h','مرضي':'pill-m','اجازة':'pill-v','انقطاع':'pill-a'};
   el.innerHTML=data.map(function(r){
-    var pills=(r.employees||[]).map(function(e){
+    var emps=filterStatus!=='all'?(r.employees||[]).filter(function(e){return e.status===filterStatus||searchEmp&&e.name.indexOf(searchEmp)!==-1;}):(r.employees||[]);
+    var pills=emps.map(function(e){
       var hl=searchEmp&&e.name.indexOf(searchEmp)!==-1?'outline:2px solid var(--blue);':'';
       return '<div class="pill '+(pm[e.status]||'pill-p')+'" style="'+hl+'">'+e.name+': '+e.status+(e.note?' ('+e.note+')':'')+' </div>';
     }).join('');
@@ -1263,6 +1478,7 @@ function renderRecs(){
   }).join('');
 }
 window._setF=function(v){filterSt=v;renderRecs();};
+window._setStatus=function(v){filterStatus=v;renderRecs();};
 window._delRec=function(id){
   if(!confirm('حذف هذا التقرير؟'))return;
   var r=records.find(function(x){return x.id===id;});
