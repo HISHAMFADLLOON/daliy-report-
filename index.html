@@ -320,6 +320,24 @@ input[type=date]:focus{border-color:var(--blue);}
 .footer-icon:active{transform:scale(.92);}
 .fi-wa{background:#25D366;} .fi-tg{background:#229ED9;}
 
+/* DASHBOARD */
+.dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px;}
+.dash-card{background:var(--card);border:1.5px solid var(--border);border-radius:16px;
+  padding:16px 14px;text-align:center;box-shadow:0 2px 8px var(--shadow);}
+.dash-card-wide{grid-column:1/-1;}
+.dash-num{font-size:36px;font-weight:900;line-height:1;margin-bottom:4px;}
+.dash-lbl{font-size:12px;color:var(--muted);font-weight:700;}
+.dash-station-row{display:flex;justify-content:space-between;align-items:center;
+  padding:10px 14px;border-radius:11px;margin-bottom:8px;font-size:13px;}
+.dash-station-row.done{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);}
+.dash-station-row.pending{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);}
+.dash-station-name{font-weight:700;}
+.dash-station-time{font-size:11px;color:var(--muted);}
+.dash-refresh{width:100%;padding:10px;border-radius:10px;background:var(--card);
+  border:1.5px solid var(--border);color:var(--muted);font-family:'Cairo',sans-serif;
+  font-size:13px;font-weight:700;cursor:pointer;margin-bottom:16px;transition:all .2s;}
+.dash-refresh:hover{border-color:var(--blue);color:var(--blue);}
+
 .empty{text-align:center;padding:48px 20px;color:var(--muted);}
 .empty .ei{font-size:44px;margin-bottom:10px;}
 .loading{text-align:center;padding:32px;color:var(--muted);font-size:14px;}
@@ -357,14 +375,20 @@ input[type=date]:focus{border-color:var(--blue);}
     </div>
   </div>
   <div class="tabs">
-    <button class="tab on" id="tab-stations">&#127979; المحطات</button>
+    <button class="tab on" id="tab-dash">&#127968; الرئيسية</button>
+    <button class="tab"    id="tab-stations">&#127979; المحطات</button>
     <button class="tab"    id="tab-links">&#128279; الروابط</button>
     <button class="tab"    id="tab-records">&#128202; السجلات</button>
     <button class="tab"    id="tab-stats">&#128200; احصائيات</button>
   </div>
 
+  <!-- DASHBOARD -->
+  <div class="view on" id="view-dash">
+    <div id="dashBox"><div class="loading">&#9203; جاري التحميل...</div></div>
+  </div>
+
   <!-- STATIONS -->
-  <div class="view on" id="view-stations">
+  <div class="view" id="view-stations">
     <div class="sec">اضافة محطة جديدة</div>
     <div class="row">
       <input type="text" id="inSt"  placeholder="اسم المحطة">
@@ -679,7 +703,7 @@ if(shortId){
 }
 
 function initAdmin(){
-  loadStations(renderSt);
+  loadStations(function(){renderSt();loadDash();});
   setupTabs();
   setupRecordsBtns();
   if(localStorage.getItem('att_role')!=='admin'){
@@ -698,13 +722,89 @@ function showLocked(msg){
     '<div class="cs-sub">'+(msg||'تم تسجيل الحضور مسبقا.<br>تواصل مع المسؤول للحصول على رابط جديد.')+'</div></div>';
 }
 
+// ── DASHBOARD ──
+function loadDash(){
+  var el=document.getElementById('dashBox');if(!el)return;
+  el.innerHTML='<div class="loading">&#9203; جاري التحميل...</div>';
+  sbGet('attendance','report_date_iso=eq.'+todayISO+'&select=station,manager,report_time,employees&order=created_at.desc&limit=500',function(data){
+    var reportedNames=new Set(data.map(function(r){return r.station;}));
+    var reported=stations.filter(function(s){return reportedNames.has(s.name);});
+    var pending=stations.filter(function(s){return !reportedNames.has(s.name);});
+    var totalPresent=0,totalAll=0;
+    data.forEach(function(r){
+      (r.employees||[]).forEach(function(e){
+        totalAll++;
+        if(e.status==='حاضر')totalPresent++;
+      });
+    });
+    var lastRec=data[0];
+    var attendPct=totalAll?Math.round(totalPresent/totalAll*100):0;
+    var barColor=attendPct>=90?'var(--green)':attendPct>=70?'var(--gold)':'var(--red)';
+
+    var reportedHTML=reported.map(function(s){
+      var rec=data.find(function(r){return r.station===s.name;});
+      return '<div class="dash-station-row done">'+
+        '<div>'+
+          '<div class="dash-station-name">'+s.name+'</div>'+
+          '<div class="dash-station-time">المدير: '+s.manager+'</div>'+
+        '</div>'+
+        '<div style="text-align:left">'+
+          '<div style="color:var(--green);font-weight:700;font-size:12px">✅ سجّل</div>'+
+          '<div class="dash-station-time">'+(rec?rec.report_time:'')+'</div>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+
+    var pendingHTML=pending.map(function(s){
+      return '<div class="dash-station-row pending">'+
+        '<div>'+
+          '<div class="dash-station-name">'+s.name+'</div>'+
+          '<div class="dash-station-time">المدير: '+s.manager+'</div>'+
+        '</div>'+
+        '<div style="color:var(--red);font-weight:700;font-size:12px">❌ لم يسجّل</div>'+
+      '</div>';
+    }).join('');
+
+    el.innerHTML=
+      '<button class="dash-refresh" onclick="loadDash()">&#8635; تحديث</button>'+
+      '<div class="dash-grid">'+
+        '<div class="dash-card">'+
+          '<div class="dash-num" style="color:var(--green)">'+reported.length+'</div>'+
+          '<div class="dash-lbl">سجّلت ✅</div>'+
+        '</div>'+
+        '<div class="dash-card">'+
+          '<div class="dash-num" style="color:var(--red)">'+pending.length+'</div>'+
+          '<div class="dash-lbl">لم تسجّل ❌</div>'+
+        '</div>'+
+        '<div class="dash-card">'+
+          '<div class="dash-num" style="color:var(--blue)">'+totalPresent+'</div>'+
+          '<div class="dash-lbl">حاضر اليوم</div>'+
+        '</div>'+
+        '<div class="dash-card">'+
+          '<div class="dash-num" style="color:'+barColor+'">'+attendPct+'%</div>'+
+          '<div class="dash-lbl">نسبة الحضور</div>'+
+        '</div>'+
+        (lastRec?
+          '<div class="dash-card dash-card-wide" style="text-align:right">'+
+            '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">آخر تسجيل</div>'+
+            '<div style="font-size:14px;font-weight:900">'+lastRec.station+'</div>'+
+            '<div style="font-size:12px;color:var(--muted)">'+lastRec.manager+' - '+lastRec.report_time+'</div>'+
+          '</div>':'')+
+      '</div>'+
+      (reported.length?'<div class="sec">المحطات اللي سجّلت ('+reported.length+')</div>'+reportedHTML:'')+
+      (pending.length?'<div class="sec">المحطات اللي لم تسجّل ('+pending.length+')</div>'+pendingHTML:''+
+        (stations.length?'<div class="empty"><div class="ei">🎉</div><p>كل المحطات سجّلت الحضور اليوم!</p></div>':''));
+  });
+}
+
 // ── TABS ──
 function setupTabs(){
   var tabs=[
-    {btn:'tab-stations',view:'view-stations',fn:renderSt},
-    {btn:'tab-links',   view:'view-links',   fn:renderLinks},
-    {btn:'tab-records', view:'view-records', fn:loadToday},
-    {btn:'tab-stats',   view:'view-stats',   fn:loadStats}
+    {btn:'tab-dash',     view:'view-dash',     fn:loadDash},
+    {btn:'tab-stations', view:'view-stations', fn:renderSt},
+    {btn:'tab-links',    view:'view-links',    fn:renderLinks},
+    {btn:'tab-records',  view:'view-records',  fn:loadToday},
+    {btn:'tab-stats',    view:'view-stats',    fn:loadStats}
   ];
   tabs.forEach(function(t){
     document.getElementById(t.btn).addEventListener('click',function(){
