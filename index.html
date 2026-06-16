@@ -464,6 +464,7 @@ input[type=date]:focus{border-color:var(--blue);}
     <div class="export-row">
       <button class="btn btn-green" id="expDayBtn">&#128196; Excel اليوم</button>
       <button class="btn btn-blue"  id="expMonBtn">&#128197; Excel الشهر</button>
+      <button class="btn btn-green" id="expWekBtn">&#128198; Excel الأسبوع</button>
       <button class="btn btn-ghost" id="expPdfBtn">&#128209; PDF اليوم</button>
       <button class="btn btn-ghost" id="copyRptBtn">&#128203; نسخ للواتساب</button>
       <button class="btn btn-ghost" style="grid-column:1/-1" id="auditBtn">&#128203; سجل التدقيق</button>
@@ -1251,6 +1252,22 @@ function setupRecordsBtns(){
       buildExcel(data,null,true);
     });
   });
+
+  document.getElementById('expWekBtn').addEventListener('click',function(){
+    var now=new Date();
+    var day=now.getDay();
+    // الأسبوع من الأحد للسبت
+    var diffSun=day===0?0:day;
+    var sun=new Date(now); sun.setDate(now.getDate()-diffSun);
+    var sat=new Date(sun); sat.setDate(sun.getDate()+6);
+    var fmt=function(d){return d.toISOString().split('T')[0];};
+    var startISO=fmt(sun), endISO=fmt(sat);
+    toast('جاري تحميل بيانات الأسبوع...','ok');
+    sbGet('attendance','report_date_iso=gte.'+startISO+'&report_date_iso=lte.'+endISO+'&order=created_at.asc&limit=1000',function(data){
+      if(!data.length){toast('لا توجد بيانات هذا الأسبوع','warn');return;}
+      buildExcelWeek(data,startISO,endISO);
+    });
+  });
   document.getElementById('delAllBtn').addEventListener('click',function(){
     var data=filterSt==='all'?records:records.filter(function(r){return r.station===filterSt;});
     if(!data.length){toast('لا توجد سجلات','warn');return;}
@@ -1600,6 +1617,91 @@ function buildExcel(data,dateLabel,isMonth){
   a.download=fname;a.style.display='none';
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   toast('تم تصدير Excel','ok');
+}
+
+// ── WEEKLY EXCEL ──
+function buildExcelWeek(data,startISO,endISO){
+  if(!data||!data.length){toast('لا توجد بيانات','warn');return;}
+  if(typeof XLSX==='undefined'){toast('انتظر ثم حاول مرة اخرى','warn');return;}
+
+  // بناء أيام الأسبوع
+  var days=[];
+  var cur=new Date(startISO+'T00:00:00');
+  var end=new Date(endISO+'T00:00:00');
+  var dayNames=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+  while(cur<=end){
+    var iso=cur.toISOString().split('T')[0];
+    var p=iso.split('-');
+    days.push({lbl:dayNames[cur.getDay()]+' '+p[2]+'/'+p[1],iso:iso});
+    cur.setDate(cur.getDate()+1);
+  }
+
+  // بناء خريطة البيانات
+  var dataMap={};
+  data.forEach(function(r){
+    if(!dataMap[r.station])dataMap[r.station]={};
+    (r.employees||[]).forEach(function(e){
+      if(!dataMap[r.station][e.name])dataMap[r.station][e.name]={};
+      dataMap[r.station][e.name][r.report_date_iso]={status:e.status||'-',note:e.note||''};
+    });
+  });
+
+  var sts=stations.length?stations:Array.from(new Set(data.map(function(r){return r.station;}))).map(function(name){
+    return {name:name,manager:(data.find(function(r){return r.station===name;})||{}).manager||'',
+      employees:Array.from(new Set(data.filter(function(r){return r.station===name;})
+        .reduce(function(a,r){return a.concat((r.employees||[]).map(function(e){return e.name;}));},[])))};
+  });
+
+  var wb=XLSX.utils.book_new();
+
+  sts.forEach(function(st){
+    var sd=dataMap[st.name]||{};
+    var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
+    var hdr=['الموظف'].concat(days.map(function(d){return d.lbl;})).concat(['حاضر','غياب','نسبة الحضور']);
+    var rows=pp.map(function(name){
+      var ed=sd[name]||{};
+      var cells=days.map(function(d){
+        var e=ed[d.iso];
+        if(!e||!e.status||e.status==='-')return '-';
+        return e.note?e.status+' - '+e.note:e.status;
+      });
+      var pr=days.filter(function(d){return(ed[d.iso]||{}).status==='حاضر';}).length;
+      var worked=days.filter(function(d){return ed[d.iso]&&ed[d.iso].status&&ed[d.iso].status!=='-';}).length;
+      var ab=worked-pr;
+      var pct=worked?Math.round(pr/worked*100)+'%':'-';
+      return [name].concat(cells).concat([pr,ab,pct]);
+    });
+    var ws=XLSX.utils.aoa_to_sheet([hdr].concat(rows));
+    ws['!cols']=[{wch:16}].concat(days.map(function(){return{wch:14};})).concat([{wch:9},{wch:9},{wch:13}]);
+    XLSX.utils.book_append_sheet(wb,ws,st.name.substring(0,31));
+  });
+
+  // شيت ملخص
+  var sh=['الموظف','المحطة','المدير','حاضر','غياب','نسبة الحضور'];
+  var sr=[];
+  sts.forEach(function(st){
+    var sd=dataMap[st.name]||{};
+    var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
+    pp.forEach(function(name){
+      var ed=sd[name]||{};
+      var pr=days.filter(function(d){return(ed[d.iso]||{}).status==='حاضر';}).length;
+      var worked=days.filter(function(d){return ed[d.iso]&&ed[d.iso].status&&ed[d.iso].status!=='-';}).length;
+      var pct=worked?Math.round(pr/worked*100)+'%':'-';
+      sr.push([name,st.name,st.manager,pr,worked-pr,pct]);
+    });
+  });
+  var ws2=XLSX.utils.aoa_to_sheet([sh].concat(sr));
+  ws2['!cols']=[{wch:16},{wch:16},{wch:16},{wch:9},{wch:9},{wch:13}];
+  XLSX.utils.book_append_sheet(wb,ws2,'ملخص الأسبوع');
+
+  var p1=startISO.split('-'),p2=endISO.split('-');
+  var fname='حضور_اسبوع_'+p1[2]+'-'+p1[1]+' الى '+p2[2]+'-'+p2[1]+'.xlsx';
+  var wbout=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
+  var a=document.createElement('a');
+  a.href='data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,'+wbout;
+  a.download=fname;a.style.display='none';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  toast('تم تصدير تقرير الأسبوع','ok');
 }
 
 // ── MONTHLY STATS ──
