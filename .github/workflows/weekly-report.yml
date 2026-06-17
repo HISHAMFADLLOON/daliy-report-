@@ -1,0 +1,100 @@
+name: Weekly Attendance Report
+
+on:
+  schedule:
+    - cron: '0 7 * * 6'   # كل سبت الساعة 10 صباحًا القاهرة
+  workflow_dispatch:
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate and send weekly report
+        run: |
+          SUN=$(date -d "last sunday" +%Y-%m-%d)
+          SAT=$(date -d "yesterday" +%Y-%m-%d)
+
+          echo "Week: $SUN to $SAT"
+
+          DATA=$(curl -s \
+            "${{ secrets.SB_URL }}/rest/v1/attendance?select=station,manager,report_date_iso,employees&report_date_iso=gte.${SUN}&report_date_iso=lte.${SAT}&order=report_date_iso.asc&limit=2000" \
+            -H "apikey: ${{ secrets.SB_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SB_KEY }}")
+
+          python3 << PYEOF
+          import json
+
+          data = json.loads('''$DATA''')
+          sun = "$SUN"
+          sat = "$SAT"
+
+          if not data:
+              msg = "📊 التقرير الأسبوعي\n━━━━━━━━━━━━━━\nلا توجد بيانات هذا الأسبوع\n" + sun + " → " + sat
+          else:
+              st_map = {}
+              for r in data:
+                  st = r['station']
+                  if st not in st_map:
+                      st_map[st] = {'manager': r['manager'], 'days': {}}
+                  day = r['report_date_iso']
+                  st_map[st]['days'][day] = r.get('employees') or []
+
+              msg = "📊 التقرير الأسبوعي\n"
+              msg += sun + " ← " + sat + "\n"
+              msg += "━━━━━━━━━━━━━━\n\n"
+
+              total_present = 0
+              total_all = 0
+
+              for st_name, info in st_map.items():
+                  present_count = 0
+                  all_count = 0
+                  emp_stats = {}
+
+                  for day, emps in info['days'].items():
+                      for e in emps:
+                          name = e['name']
+                          status = e.get('status', '-')
+                          if name not in emp_stats:
+                              emp_stats[name] = {'حاضر':0,'راحة':0,'عطلة':0,'مرضي':0,'اجازة':0,'انقطاع':0}
+                          if status in emp_stats[name]:
+                              emp_stats[name][status] += 1
+                          all_count += 1
+                          total_all += 1
+                          if status == 'حاضر':
+                              present_count += 1
+                              total_present += 1
+
+                  pct = round(present_count / all_count * 100) if all_count else 0
+                  days_reported = len(info['days'])
+
+                  msg += "🏢 " + st_name + "\n"
+                  msg += "👤 " + info['manager'] + "\n"
+                  msg += "📅 أيام التسجيل: " + str(days_reported) + "\n"
+                  msg += "✅ نسبة الحضور: " + str(pct) + "%\n\n"
+
+                  for emp_name, counts in emp_stats.items():
+                      line = "• " + emp_name + ": "
+                      parts = []
+                      if counts['حاضر']:   parts.append("حاضر " + str(counts['حاضر']))
+                      if counts['راحة']:   parts.append("راحة " + str(counts['راحة']))
+                      if counts['عطلة']:   parts.append("عطلة " + str(counts['عطلة']))
+                      if counts['مرضي']:   parts.append("مرضي " + str(counts['مرضي']))
+                      if counts['اجازة']:  parts.append("اجازة " + str(counts['اجازة']))
+                      if counts['انقطاع']: parts.append("انقطاع " + str(counts['انقطاع']))
+                      msg += line + " | ".join(parts) + "\n"
+
+                  msg += "─────────────\n\n"
+
+              overall_pct = round(total_present / total_all * 100) if total_all else 0
+              msg += "📈 نسبة الحضور الإجمالية: " + str(overall_pct) + "%\n"
+
+          with open('/tmp/weekly_msg.txt', 'w', encoding='utf-8') as f:
+              f.write(msg)
+          PYEOF
+
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "{\"chat_id\":\"${{ secrets.CHAT_ID }}\",\"text\":$(python3 -c "import json; print(json.dumps(open('/tmp/weekly_msg.txt').read()))")}"
+
+          echo "Done!"
