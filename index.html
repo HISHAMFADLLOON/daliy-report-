@@ -761,7 +761,9 @@ function checkLoginLock(){
 }
 
 // فحص القفل عند تحميل الصفحة
-checkLoginLock();
+document.addEventListener('DOMContentLoaded', function(){
+  checkLoginLock();
+});
 // فحص دوري كل ثانية لو مقفول
 setInterval(function(){
   if(getLoginState().lockedUntil) checkLoginLock();
@@ -2034,5 +2036,4 @@ function loadStats(){
     });
 
     el.innerHTML=sts.map(function(s){
-      var sd=dataMap[s.name]||{};
-      var pp=(s.employees||[]).indexOf(s.mana
+      var sd=da
