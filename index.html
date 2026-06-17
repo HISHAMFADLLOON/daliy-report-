@@ -734,13 +734,46 @@ function sha256(text){
   });
 }
 
+// ── LOGIN ATTEMPTS ──
+var MAX_ATTEMPTS = 5;
+var LOCKOUT_MS   = 10 * 60 * 1000; // 10 دقائق
+
+function getLoginState(){
+  return {
+    attempts: parseInt(localStorage.getItem('login_attempts')||'0'),
+    lockedUntil: parseInt(localStorage.getItem('login_locked')||'0')
+  };
+}
+function checkLoginLock(){
+  var s=getLoginState();
+  if(s.lockedUntil && Date.now() < s.lockedUntil){
+    var mins=Math.ceil((s.lockedUntil-Date.now())/60000);
+    document.getElementById('lErr').textContent='تم تجاوز عدد المحاولات — انتظر '+mins+' دقيقة';
+    document.getElementById('loginBtn').disabled=true;
+    return true;
+  }
+  if(s.lockedUntil && Date.now() >= s.lockedUntil){
+    localStorage.removeItem('login_attempts');
+    localStorage.removeItem('login_locked');
+  }
+  document.getElementById('loginBtn').disabled=false;
+  return false;
+}
+
+// فحص القفل عند تحميل الصفحة
+checkLoginLock();
+// فحص دوري كل ثانية لو مقفول
+setInterval(function(){
+  if(getLoginState().lockedUntil) checkLoginLock();
+},1000);
+
 function doLogin(){
+  if(checkLoginLock())return;
   var u=document.getElementById('lUser').value.trim();
   var p=document.getElementById('lPass').value;
   if(!u||!p){toast('ادخل اسم المستخدم وكلمة المرور','warn');return;}
   var btn=document.getElementById('loginBtn');
   btn.textContent='جاري التحقق...';btn.disabled=true;
-  // تحقق من Supabase عن طريق دالة verify_login (جدول app_users مقفول بالكامل)
   sha256(p).then(function(hash){
     fetch(SB_URL+'/rest/v1/rpc/verify_login',{method:'POST',headers:SBH,
       body:JSON.stringify({p_username:u,p_hash:hash})})
@@ -748,6 +781,8 @@ function doLogin(){
       .then(function(role){
         btn.textContent='دخول';btn.disabled=false;
         if(role){
+          localStorage.removeItem('login_attempts');
+          localStorage.removeItem('login_locked');
           localStorage.setItem('att_sess','1');
           localStorage.setItem('att_user',u);
           localStorage.setItem('att_role',role);
@@ -757,7 +792,16 @@ function doLogin(){
           resetSessionTimer();
           initAdmin();
         } else {
-          document.getElementById('lErr').textContent='اسم المستخدم او كلمة المرور غلط';
+          var attempts=getLoginState().attempts+1;
+          localStorage.setItem('login_attempts', attempts);
+          if(attempts >= MAX_ATTEMPTS){
+            localStorage.setItem('login_locked', Date.now()+LOCKOUT_MS);
+            document.getElementById('lErr').textContent='تم تجاوز عدد المحاولات — انتظر 10 دقائق';
+            btn.disabled=true;
+          } else {
+            document.getElementById('lErr').textContent=
+              'اسم المستخدم او كلمة المرور غلط ('+(MAX_ATTEMPTS-attempts)+' محاولات متبقية)';
+          }
           document.getElementById('lPass').value='';
         }
       }).catch(function(){
@@ -946,35 +990,46 @@ function toggleSt(id){var el=document.getElementById('sc'+id);if(el)el.classList
 function renderSt(){
   var el=document.getElementById('stList');if(!el)return;
   if(!stations.length){el.innerHTML='<div class="empty"><div class="ei">&#127979;</div><p>لا توجد محطات بعد</p></div>';return;}
-  el.innerHTML=stations.map(function(s){
-    var empHTML=s.employees.map(function(e,i){
-      return '<div class="emp-tag">'+e+'<span class="emp-del" onclick="window._delEmp('+s.id+','+i+')">&#10005;</span></div>';
+  // جيب آخر تسجيل لكل محطة
+  sbGet('attendance','select=station,report_date,report_time&order=created_at.desc&limit=200',function(recs){
+    var lastMap={};
+    recs.forEach(function(r){if(!lastMap[r.station])lastMap[r.station]=r.report_date+' '+r.report_time;});
+    el.innerHTML=stations.map(function(s){
+      var last=lastMap[s.name];
+      var lastHTML=last?
+        '<div style="font-size:11px;color:var(--green);font-weight:700;margin-top:2px">&#128337; آخر تسجيل: '+last+'</div>':
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px">لم يسجّل بعد</div>';
+      var empHTML=s.employees.map(function(e,i){
+        return '<div class="emp-tag">'+e+'<span class="emp-del" onclick="window._delEmp('+s.id+','+i+')">&#10005;</span></div>';
+      }).join('');
+      return '<div class="st-card" id="sc'+s.id+'">'+
+        '<div class="st-hdr" onclick="window._toggleSt('+s.id+')">'+
+          '<div class="st-tw"><div class="st-dot"></div>'+
+            '<div><div class="st-name">'+s.name+'</div>'+
+            '<div class="st-meta">المدير: '+s.manager+' &ndash; '+s.employees.length+' موظف</div>'+
+            lastHTML+
+            '</div></div>'+
+          '<div class="st-acts">'+
+            '<button class="btn btn-red" style="padding:6px 10px;font-size:12px" onclick="event.stopPropagation();window._delStation('+s.id+')">حذف</button>'+
+            '<span class="chev">&#9660;</span></div></div>'+
+        '<div class="st-body">'+
+          '<div class="mgr-badge">'+
+            '<div><div style="font-size:11px;color:var(--muted);margin-bottom:2px">المدير</div>'+
+            '<div class="mgr-nm">'+s.manager+'</div></div>'+
+            '<div style="font-size:12px;color:var(--muted)">'+s.name+'</div></div>'+
+          '<div style="margin-top:13px">'+
+            '<div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:8px">الموظفون ('+s.employees.length+')</div>'+
+            '<div class="emp-list">'+empHTML+
+              '<button class="btn btn-ghost" style="padding:5px 11px;font-size:12px" onclick="window._openEmpOv('+s.id+',\''+s.name.replace(/'/g,"\\'")+'\')">+ موظف</button>'+
+            '</div></div>'+
+          '<div style="margin-top:13px">'+
+            '<div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:8px">كود المدير السري (اختياري &ndash; بدونه يدخل المدير بدون كود)</div>'+
+            '<div class="row">'+
+              '<input type="text" id="code_'+s.id+'" placeholder="مثال: 1234" value="'+(s.manager_code||'').replace(/"/g,'&quot;')+'">'+
+              '<button class="btn btn-blue" onclick="window._saveCode('+s.id+')">حفظ</button>'+
+            '</div></div></div></div>';
     }).join('');
-    return '<div class="st-card" id="sc'+s.id+'">'+
-      '<div class="st-hdr" onclick="window._toggleSt('+s.id+')">'+
-        '<div class="st-tw"><div class="st-dot"></div>'+
-          '<div><div class="st-name">'+s.name+'</div>'+
-          '<div class="st-meta">المدير: '+s.manager+' &ndash; '+s.employees.length+' موظف</div></div></div>'+
-        '<div class="st-acts">'+
-          '<button class="btn btn-red" style="padding:6px 10px;font-size:12px" onclick="event.stopPropagation();window._delStation('+s.id+')">حذف</button>'+
-          '<span class="chev">&#9660;</span></div></div>'+
-      '<div class="st-body">'+
-        '<div class="mgr-badge">'+
-          '<div><div style="font-size:11px;color:var(--muted);margin-bottom:2px">المدير</div>'+
-          '<div class="mgr-nm">'+s.manager+'</div></div>'+
-          '<div style="font-size:12px;color:var(--muted)">'+s.name+'</div></div>'+
-        '<div style="margin-top:13px">'+
-          '<div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:8px">الموظفون ('+s.employees.length+')</div>'+
-          '<div class="emp-list">'+empHTML+
-            '<button class="btn btn-ghost" style="padding:5px 11px;font-size:12px" onclick="window._openEmpOv('+s.id+',\''+s.name.replace(/'/g,"\\'")+'\')">+ موظف</button>'+
-          '</div></div>'+
-        '<div style="margin-top:13px">'+
-          '<div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:8px">كود المدير السري (اختياري &ndash; بدونه يدخل المدير بدون كود)</div>'+
-          '<div class="row">'+
-            '<input type="text" id="code_'+s.id+'" placeholder="مثال: 1234" value="'+(s.manager_code||'').replace(/"/g,'&quot;')+'">'+
-            '<button class="btn btn-blue" onclick="window._saveCode('+s.id+')">حفظ</button>'+
-          '</div></div></div></div>';
-  }).join('');
+  });
 }
 window._toggleSt=toggleSt;
 window._delStation=delStation;
@@ -1229,34 +1284,78 @@ function showMgrForm(info,lockKey){
       if(el)el.scrollIntoView({behavior:'smooth',block:'center'});
       return;
     }
-    var btn=document.getElementById('subBtn');
-    btn.disabled=true;btn.textContent='جاري الارسال...';
-    var now=new Date();
-    var date=now.toLocaleDateString('ar-EG');
-    var time=now.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
-    var emps=people.map(function(n){
+
+    // شاشة المراجعة قبل الإرسال
+    var pm={'حاضر':'pill-p','راحة':'pill-r','عطلة':'pill-h','مرضي':'pill-m','اجازة':'pill-v','انقطاع':'pill-a'};
+    var previewHTML=people.map(function(n){
       var ne=document.getElementById('pn_'+CSS.escape(n));
-      return {name:n,status:att[n],note:(ne&&att[n]!=='حاضر')?ne.value.trim():''};
+      var note=(ne&&att[n]!=='حاضر')?ne.value.trim():'';
+      return '<div style="display:flex;justify-content:space-between;align-items:center;'+
+        'padding:8px 0;border-bottom:1px solid var(--border)">'+
+        '<span style="font-weight:700;font-size:13px">'+n+'</span>'+
+        '<div style="display:flex;align-items:center;gap:6px">'+
+          (note?'<span style="font-size:11px;color:var(--muted)">('+note+')</span>':'')+
+          '<span class="pill '+(pm[att[n]]||'pill-p')+'" style="margin:0">'+att[n]+'</span>'+
+        '</div></div>';
+    }).join('');
+
+    var cntPresent=people.filter(function(n){return att[n]==='حاضر';}).length;
+    var cntOther=people.length-cntPresent;
+
+    document.getElementById('mgrBody').innerHTML=
+      '<div class="mgr-wrap">'+
+        '<div class="ip">'+
+          '<div class="ip-station">&#128203; مراجعة التقرير</div>'+
+          '<div class="ip-mgr">'+info.stationName+' — '+info.managerName+'</div>'+
+        '</div>'+
+        '<div class="stats" style="margin-bottom:16px">'+
+          '<div class="stat"><div class="stat-n" style="color:var(--green)">'+cntPresent+'</div><div class="stat-l">حاضر</div></div>'+
+          '<div class="stat"><div class="stat-n" style="color:var(--red)">'+cntOther+'</div><div class="stat-l">غير حاضر</div></div>'+
+          '<div class="stat"><div class="stat-n" style="color:var(--blue)">'+people.length+'</div><div class="stat-l">الإجمالي</div></div>'+
+        '</div>'+
+        '<div style="margin-bottom:16px">'+previewHTML+'</div>'+
+        '<div style="display:flex;gap:10px">'+
+          '<button class="sub-btn" id="confirmBtn" style="flex:2">&#10003; تأكيد الإرسال</button>'+
+          '<button class="sub-btn" id="backBtn" style="flex:1;background:var(--card);color:var(--text);'+
+            'border:1.5px solid var(--border);box-shadow:none">&#8592; تعديل</button>'+
+        '</div>'+
+      '</div>';
+
+    // زرار تعديل - يرجع لشاشة التسجيل
+    document.getElementById('backBtn').addEventListener('click',function(){
+      showMgrForm(info,lockKey);
     });
-    sbPost('attendance',{
-      station:info.stationName,manager:info.managerName,
-      report_date:date,report_date_iso:now.toISOString().split('T')[0],
-      report_time:time,employees:emps
-    }).then(function(ok){
-      var groups={};STATUSES.forEach(function(s){groups[s.key]=[];});
-      emps.forEach(function(e){var lbl=e.note?e.name+'('+e.note+')':e.name;if(groups[e.status])groups[e.status].push(lbl);});
-      var msg='تقرير حضور\n'+info.stationName+' - '+info.managerName+'\n'+date+' - '+time+'\n---\n';
-      STATUSES.forEach(function(s){if(groups[s.key].length)msg+=s.key+': '+groups[s.key].join(', ')+'\n';});
-      fetch('https://api.telegram.org/bot'+BOT_TOKEN+'/sendMessage',{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({chat_id:CHAT_ID,text:msg})
-      }).catch(function(){});
-      // قفل الرابط في Supabase
-      sbPatch('manager_links','id=eq.'+encodeURIComponent(lockKey),{used_date:todayISO});
-      document.getElementById('mgrBody').innerHTML=
-        '<div class="cs"><div class="cs-icon">&#10003;</div>'+
-        '<div class="cs-title">تم ارسال التقرير</div>'+
-        '<div class="cs-sub">'+info.stationName+'<br>'+(ok?'تم الحفظ بنجاح':'تحقق من الاتصال')+'<br>هذا الرابط مقفول اليوم</div></div>';
+
+    // زرار تأكيد الإرسال
+    document.getElementById('confirmBtn').addEventListener('click',function(){
+      var btn=document.getElementById('confirmBtn');
+      btn.disabled=true;btn.textContent='جاري الارسال...';
+      var now=new Date();
+      var date=now.toLocaleDateString('ar-EG');
+      var time=now.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+      var emps=people.map(function(n){
+        var ne=document.getElementById('pn_'+CSS.escape(n));
+        return {name:n,status:att[n],note:(ne&&att[n]!=='حاضر')?ne.value.trim():''};
+      });
+      sbPost('attendance',{
+        station:info.stationName,manager:info.managerName,
+        report_date:date,report_date_iso:now.toISOString().split('T')[0],
+        report_time:time,employees:emps
+      }).then(function(ok){
+        var groups={};STATUSES.forEach(function(s){groups[s.key]=[];});
+        emps.forEach(function(e){var lbl=e.note?e.name+'('+e.note+')':e.name;if(groups[e.status])groups[e.status].push(lbl);});
+        var msg='تقرير حضور\n'+info.stationName+' - '+info.managerName+'\n'+date+' - '+time+'\n---\n';
+        STATUSES.forEach(function(s){if(groups[s.key].length)msg+=s.key+': '+groups[s.key].join(', ')+'\n';});
+        fetch('https://api.telegram.org/bot'+BOT_TOKEN+'/sendMessage',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({chat_id:CHAT_ID,text:msg})
+        }).catch(function(){});
+        sbPatch('manager_links','id=eq.'+encodeURIComponent(lockKey),{used_date:todayISO});
+        document.getElementById('mgrBody').innerHTML=
+          '<div class="cs"><div class="cs-icon">&#10003;</div>'+
+          '<div class="cs-title">تم ارسال التقرير</div>'+
+          '<div class="cs-sub">'+info.stationName+'<br>'+(ok?'تم الحفظ بنجاح':'تحقق من الاتصال')+'<br>هذا الرابط مقفول اليوم</div></div>';
+      });
     });
   });
 }
@@ -1946,31 +2045,4 @@ function renderStatsChart(labels,data){
         fill:true,
         tension:.3,
         pointRadius:3,
-        pointBackgroundColor:blue
-      }]
-    },
-    options:{
-      responsive:true,
-      maintainAspectRatio:false,
-      scales:{
-        y:{min:0,max:100,ticks:{color:muted,callback:function(v){return v+'%';}},grid:{color:border}},
-        x:{ticks:{color:muted},grid:{color:border}}
-      },
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.parsed.y+'%';}}}}
-    }
-  });
-}
-
-// ── TOAST ──
-function toast(msg,type){
-  var t=document.getElementById('toast');
-  t.textContent=msg;t.className='toast show '+(type||'ok');
-  setTimeout(function(){t.classList.remove('show');},2600);
-}
-
-})();
-</script>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
-</body>
-</html>
+        pointBackgroundColor
