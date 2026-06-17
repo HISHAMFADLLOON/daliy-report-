@@ -448,8 +448,11 @@ input[type=date]:focus{border-color:var(--blue);}
     </div>
     <!-- بحث بالاسم -->
     <div class="row" style="margin-bottom:8px">
-      <input type="text" id="empSearch" placeholder="&#128269; بحث باسم الموظف">
+      <input type="text" id="empSearch" placeholder="&#128269; اسم موظف أو محطة">
+      <button class="btn btn-blue" id="empSearchDayBtn">بحث في اليوم</button>
+      <button class="btn btn-ghost" id="empSearchMonBtn">بحث في الشهر</button>
     </div>
+    <div id="empSearchResults"></div>
     <!-- فلترة بالحالة -->
     <div class="chips" id="statusChips" style="margin-bottom:8px">
       <button class="chip on" onclick="window._setStatus('all')">الكل</button>
@@ -613,6 +616,41 @@ applyTheme();
 document.getElementById('themeBtn').addEventListener('click', toggleTheme);
 document.getElementById('themeBtnMgr').addEventListener('click', toggleTheme);
 
+// ── SESSION TIMEOUT (ساعتين بدون نشاط) ──
+var SESSION_TIMEOUT = 2 * 60 * 60 * 1000; // ساعتين بالميلي ثانية
+var sessionTimer = null;
+
+function resetSessionTimer(){
+  if(!isLoggedIn())return;
+  localStorage.setItem('att_last_active', Date.now());
+  clearTimeout(sessionTimer);
+  sessionTimer = setTimeout(function(){
+    toast('انتهت الجلسة — سيتم تسجيل الخروج تلقائياً','warn');
+    setTimeout(function(){
+      localStorage.removeItem('att_sess');
+      localStorage.removeItem('att_role');
+      localStorage.removeItem('att_last_active');
+      location.reload();
+    }, 2000);
+  }, SESSION_TIMEOUT);
+}
+
+function checkSessionOnLoad(){
+  var lastActive = parseInt(localStorage.getItem('att_last_active')||'0');
+  if(lastActive && Date.now() - lastActive > SESSION_TIMEOUT){
+    localStorage.removeItem('att_sess');
+    localStorage.removeItem('att_role');
+    localStorage.removeItem('att_last_active');
+    return false;
+  }
+  return true;
+}
+
+// تتبع نشاط المستخدم
+['click','keydown','touchstart','scroll'].forEach(function(ev){
+  document.addEventListener(ev, resetSessionTimer, {passive:true});
+});
+
 // ── PWA: SERVICE WORKER ──
 if('serviceWorker' in navigator){
   window.addEventListener('load', function(){
@@ -674,11 +712,20 @@ function updateManagerLink(s){
 function delStationDB(id){sbDel('stations','id=eq.'+id);}
 
 // ── LOGIN ──
-function isLoggedIn(){return localStorage.getItem('att_sess')==='1';}
+function isLoggedIn(){
+  if(localStorage.getItem('att_sess')!=='1')return false;
+  return checkSessionOnLoad();
+}
 document.getElementById('loginBtn').addEventListener('click',doLogin);
 document.getElementById('lPass').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
 document.getElementById('lUser').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('lPass').focus();});
-document.getElementById('logoutBtn').addEventListener('click',function(){localStorage.removeItem('att_sess');location.reload();});
+document.getElementById('logoutBtn').addEventListener('click',function(){
+  localStorage.removeItem('att_sess');
+  localStorage.removeItem('att_role');
+  localStorage.removeItem('att_last_active');
+  clearTimeout(sessionTimer);
+  location.reload();
+});
 
 function sha256(text){
   var enc=new TextEncoder().encode(text);
@@ -704,8 +751,10 @@ function doLogin(){
           localStorage.setItem('att_sess','1');
           localStorage.setItem('att_user',u);
           localStorage.setItem('att_role',role);
+          localStorage.setItem('att_last_active', Date.now());
           document.getElementById('loginWrap').style.display='none';
           document.getElementById('adminUI').style.display='block';
+          resetSessionTimer();
           initAdmin();
         } else {
           document.getElementById('lErr').textContent='اسم المستخدم او كلمة المرور غلط';
@@ -742,9 +791,11 @@ if(shortId){
 } else if(isLoggedIn()){
   document.getElementById('loginWrap').style.display='none';
   document.getElementById('adminUI').style.display='block';
+  resetSessionTimer();
   initAdmin();
 }
 
+var dashTimer=null;
 function initAdmin(){
   loadStations(function(){renderSt();loadDash();});
   setupTabs();
@@ -753,6 +804,11 @@ function initAdmin(){
     var ab=document.getElementById('auditBtn');
     if(ab)ab.style.display='none';
   }
+  // تحديث تلقائي للداشبورد كل 5 دقائق لو الصفحة مفتوحة
+  dashTimer=setInterval(function(){
+    var dashView=document.getElementById('view-dash');
+    if(dashView&&dashView.classList.contains('on'))loadDash();
+  },5*60*1000);
 }
 
 // ── LOCKED ──
@@ -808,8 +864,10 @@ function loadDash(){
       '</div>';
     }).join('');
 
+    var now=new Date();
+    var timeStr=now.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
     el.innerHTML=
-      '<button class="dash-refresh" onclick="loadDash()">&#8635; تحديث</button>'+
+      '<button class="dash-refresh" onclick="loadDash()">&#8635; تحديث — آخر تحديث: '+timeStr+'</button>'+
       '<div class="dash-grid">'+
         '<div class="dash-card">'+
           '<div class="dash-num" style="color:var(--green)">'+reported.length+'</div>'+
@@ -1213,8 +1271,18 @@ function setupRecordsBtns(){
     document.getElementById('cmpBox').style.display='none';
     loadToday();
   });
-  document.getElementById('empSearch').addEventListener('input',function(){
-    searchEmp=this.value.trim(); renderRecs();
+  document.getElementById('empSearch').addEventListener('keydown',function(e){
+    if(e.key==='Enter') document.getElementById('empSearchDayBtn').click();
+  });
+  document.getElementById('empSearchDayBtn').addEventListener('click',function(){
+    searchEmp=document.getElementById('empSearch').value.trim();
+    document.getElementById('empSearchResults').innerHTML='';
+    renderRecs();
+  });
+  document.getElementById('empSearchMonBtn').addEventListener('click',function(){
+    var name=document.getElementById('empSearch').value.trim();
+    if(!name){toast('اكتب اسم الموظف اولا','warn');return;}
+    searchEmpInMonth(name);
   });
 
   // مقارنة يومين
@@ -1282,7 +1350,76 @@ function setupRecordsBtns(){
   });
 }
 
-// ── COMPARE ──
+// ── SEARCH EMP IN MONTH ──
+function searchEmpInMonth(name){
+  var el=document.getElementById('empSearchResults');
+  el.innerHTML='<div class="loading">&#9203; جاري البحث في الشهر...</div>';
+  var now=new Date(),y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,'0');
+  var last=new Date(y,now.getMonth()+1,0).getDate();
+  var isStation=stations.some(function(s){return s.name.indexOf(name)!==-1;});
+  sbGet('attendance',
+    'report_date_iso=gte.'+y+'-'+m+'-01&report_date_iso=lte.'+y+'-'+m+'-'+String(last).padStart(2,'0')+'&order=report_date_iso.asc&limit=2000',
+    function(data){
+      var pm={'حاضر':'pill-p','راحة':'pill-r','عطلة':'pill-h','مرضي':'pill-m','اجازة':'pill-v','انقطاع':'pill-a'};
+
+      if(isStation){
+        // بحث بالمحطة - بيعرض كل أيام المحطة في الشهر
+        var stData=data.filter(function(r){return r.station.indexOf(name)!==-1;});
+        if(!stData.length){
+          el.innerHTML='<div class="empty"><div class="ei">&#128269;</div><p>لا توجد نتائج لمحطة "'+name+'" هذا الشهر</p></div>';
+          return;
+        }
+        el.innerHTML='<div class="sec">نتائج محطة "'+name+'" — '+stData.length+' يوم هذا الشهر</div>'+
+          stData.map(function(r){
+            var pills=(r.employees||[]).map(function(e){
+              return '<div class="pill '+(pm[e.status]||'pill-p')+'">'+e.name+': '+e.status+(e.note?' ('+e.note+')':'')+' </div>';
+            }).join('');
+            return '<div class="rec-card">'+
+              '<div class="rec-head"><div>'+
+                '<div class="rec-mgr">'+r.report_date+' — '+r.report_time+'</div>'+
+                '<div class="rec-st">المدير: '+r.manager+'</div>'+
+              '</div></div>'+
+              '<div class="pills">'+pills+'</div>'+
+            '</div>';
+          }).join('');
+      } else {
+        // بحث بالموظف
+        var results=[];
+        data.forEach(function(r){
+          (r.employees||[]).forEach(function(e){
+            if(e.name.indexOf(name)!==-1){
+              results.push({date:r.report_date,dateISO:r.report_date_iso,time:r.report_time,
+                station:r.station,manager:r.manager,emp:e});
+            }
+          });
+        });
+        if(!results.length){
+          el.innerHTML='<div class="empty"><div class="ei">&#128269;</div><p>لا توجد نتائج لـ "'+name+'" هذا الشهر</p></div>';
+          return;
+        }
+        var stats={};
+        results.forEach(function(r){var s=r.emp.status;stats[s]=(stats[s]||0)+1;});
+        var statsHTML=Object.keys(stats).map(function(s){
+          return '<div class="pill '+(pm[s]||'pill-p')+'">'+s+': '+stats[s]+'</div>';
+        }).join('');
+        el.innerHTML=
+          '<div class="sec">نتائج "'+name+'" — '+results.length+' يوم هذا الشهر</div>'+
+          '<div class="pills" style="margin-bottom:12px">'+statsHTML+'</div>'+
+          results.map(function(r){
+            return '<div class="rec-card">'+
+              '<div class="rec-head"><div>'+
+                '<div class="rec-mgr">'+r.date+' — '+r.time+'</div>'+
+                '<div class="rec-st">'+r.station+' — '+r.manager+'</div>'+
+              '</div>'+
+              '<div class="pill '+(pm[r.emp.status]||'pill-p')+'" style="flex-shrink:0">'+r.emp.status+'</div>'+
+              '</div>'+
+              (r.emp.note?'<div style="font-size:12px;color:var(--muted);margin-top:4px">ملاحظة: '+r.emp.note+'</div>':'')+
+            '</div>';
+          }).join('');
+      }
+    }
+  );
+}
 function loadCompare(d1,d2){
   document.getElementById('cmpBox').style.display='block';
   document.getElementById('cmpBox').innerHTML='<div class="loading">&#9203; جاري تحميل المقارنة...</div>';
@@ -1411,7 +1548,10 @@ function loadByDate(){
   var date=document.getElementById('dateInput').value||todayISO;
   document.getElementById('recList').innerHTML='<div class="loading">&#9203; جاري التحميل...</div>';
   sbGet('attendance','report_date_iso=eq.'+encodeURIComponent(date)+'&order=created_at.desc&limit=500',function(data){
-    records=data;filterSt='all';filterStatus='all';renderRecs();
+    records=data;filterSt='all';filterStatus='all';searchEmp='';
+    document.getElementById('empSearch').value='';
+    document.getElementById('empSearchResults').innerHTML='';
+    renderRecs();
   });
 }
 function renderRecs(){
@@ -1455,11 +1595,16 @@ function renderRecs(){
 
   var data=filterSt==='all'?records:records.filter(function(r){return r.station===filterSt;});
 
-  // فلترة بالاسم
+  // فلترة بالاسم (موظف أو محطة)
   if(searchEmp){
-    data=data.filter(function(r){
-      return (r.employees||[]).some(function(e){return e.name.indexOf(searchEmp)!==-1;});
-    });
+    var isStation=stations.some(function(s){return s.name.indexOf(searchEmp)!==-1;});
+    if(isStation){
+      data=data.filter(function(r){return r.station.indexOf(searchEmp)!==-1;});
+    } else {
+      data=data.filter(function(r){
+        return (r.employees||[]).some(function(e){return e.name.indexOf(searchEmp)!==-1;});
+      });
+    }
   }
 
   // فلترة بالحالة
