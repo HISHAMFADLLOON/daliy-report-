@@ -2,7 +2,7 @@
 // شبكة أولاً (Network First) للصفحة الرئيسية عشان البيانات تفضل محدّثة
 // كاش للملفات الثابتة (الأيقونات والمانيفست) لتشغيل أسرع ودعم التثبيت
 
-const CACHE_NAME = 'attendance-cache-v1';
+const CACHE_NAME = 'attendance-cache-v2';
 const ASSETS = [
   './',
   './index.html',
