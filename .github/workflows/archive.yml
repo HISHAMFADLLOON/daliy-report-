@@ -1,0 +1,79 @@
+name: Quarterly Archive
+
+on:
+  schedule:
+    - cron: '0 8 1 */3 *'   # أول يوم كل 3 شهور الساعة 11 صباحًا القاهرة
+  workflow_dispatch:
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Archive old records
+        run: |
+          # تحديد تاريخ 3 شهور قبل اليوم
+          CUTOFF=$(date -d "-3 months" +%Y-%m-%d)
+          echo "Archiving records before: $CUTOFF"
+
+          # جيب السجلات القديمة
+          curl -s \
+            "${{ secrets.SB_URL }}/rest/v1/attendance?select=*&report_date_iso=lt.${CUTOFF}&order=report_date_iso.asc&limit=5000" \
+            -H "apikey: ${{ secrets.SB_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SB_KEY }}" \
+            -o old_records.json
+
+          COUNT=$(python3 -c "import json; data=json.load(open('old_records.json')); print(len(data))")
+          echo "Found $COUNT old records"
+
+          if [ "$COUNT" = "0" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" \
+              -H "Content-Type: application/json" \
+              -d "{\"chat_id\":\"${{ secrets.CHAT_ID }}\",\"text\":\"📦 الأرشفة التلقائية: لا توجد سجلات قديمة قبل ${CUTOFF}\"}"
+            exit 0
+          fi
+
+          # تحويل لـ Excel
+          pip install pandas openpyxl -q
+          python3 << PYEOF
+          import json, pandas as pd
+
+          with open('old_records.json', encoding='utf-8') as f:
+              data = json.load(f)
+
+          rows = []
+          for r in data:
+              for e in (r.get('employees') or []):
+                  rows.append({
+                      'التاريخ': r.get('report_date_iso'),
+                      'اليوم': r.get('report_date'),
+                      'الوقت': r.get('report_time'),
+                      'المحطة': r.get('station'),
+                      'المدير': r.get('manager'),
+                      'الموظف': e.get('name'),
+                      'الحالة': e.get('status'),
+                      'ملاحظة': e.get('note', '')
+                  })
+
+          df = pd.DataFrame(rows)
+          df.to_excel('archive.xlsx', index=False)
+          print(f"Excel created with {len(rows)} rows")
+          PYEOF
+
+          # بعت الأرشيف على تيليجرام
+          curl -s -F document=@archive.xlsx \
+            -F chat_id="${{ secrets.CHAT_ID }}" \
+            -F caption="📦 أرشيف تلقائي - سجلات قبل ${CUTOFF} - ${COUNT} تقرير" \
+            "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendDocument"
+
+          # بعد التأكد إن الملف اتبعت، امسح السجلات القديمة
+          curl -s -X DELETE \
+            "${{ secrets.SB_URL }}/rest/v1/attendance?report_date_iso=lt.${CUTOFF}" \
+            -H "apikey: ${{ secrets.SB_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SB_KEY }}"
+
+          # تنبيه الحذف
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "{\"chat_id\":\"${{ secrets.CHAT_ID }}\",\"text\":\"✅ تم أرشفة وحذف ${COUNT} تقرير قديم من قاعدة البيانات\nالسجلات المحذوفة: قبل ${CUTOFF}\"}"
+
+          echo "Archive complete!"
