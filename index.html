@@ -1456,19 +1456,27 @@ function searchEmpInMonth(name){
   var now=new Date(),y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,'0');
   var last=new Date(y,now.getMonth()+1,0).getDate();
   var isStation=stations.some(function(s){return s.name.indexOf(name)!==-1;});
+  var monthLabel=now.toLocaleDateString('ar-EG',{month:'long',year:'numeric'});
   sbGet('attendance',
     'report_date_iso=gte.'+y+'-'+m+'-01&report_date_iso=lte.'+y+'-'+m+'-'+String(last).padStart(2,'0')+'&order=report_date_iso.asc&limit=2000',
     function(data){
       var pm={'حاضر':'pill-p','راحة':'pill-r','عطلة':'pill-h','مرضي':'pill-m','اجازة':'pill-v','انقطاع':'pill-a'};
 
+      var exportBtns='<div class="row" style="margin-bottom:12px;gap:8px">'+
+        '<button class="btn btn-green" id="srchExpExcel">&#128196; تصدير Excel</button>'+
+        '<button class="btn btn-ghost" id="srchExpPdf">&#128209; تصدير PDF</button>'+
+        '<button class="btn btn-ghost" id="srchExpWa">&#128203; نسخ للواتساب</button>'+
+      '</div>';
+
       if(isStation){
-        // بحث بالمحطة - بيعرض كل أيام المحطة في الشهر
         var stData=data.filter(function(r){return r.station.indexOf(name)!==-1;});
         if(!stData.length){
           el.innerHTML='<div class="empty"><div class="ei">&#128269;</div><p>لا توجد نتائج لمحطة "'+name+'" هذا الشهر</p></div>';
           return;
         }
-        el.innerHTML='<div class="sec">نتائج محطة "'+name+'" — '+stData.length+' يوم هذا الشهر</div>'+
+        el.innerHTML=
+          '<div class="sec">نتائج محطة "'+name+'" — '+stData.length+' يوم — '+monthLabel+'</div>'+
+          exportBtns+
           stData.map(function(r){
             var pills=(r.employees||[]).map(function(e){
               return '<div class="pill '+(pm[e.status]||'pill-p')+'">'+e.name+': '+e.status+(e.note?' ('+e.note+')':'')+' </div>';
@@ -1481,8 +1489,12 @@ function searchEmpInMonth(name){
               '<div class="pills">'+pills+'</div>'+
             '</div>';
           }).join('');
+
+        document.getElementById('srchExpExcel').onclick=function(){buildExcel(stData,null,true);};
+        document.getElementById('srchExpPdf').onclick=function(){buildPDF(stData,name+' - '+monthLabel);};
+        document.getElementById('srchExpWa').onclick=function(){copyReport(stData,name+' - '+monthLabel);};
+
       } else {
-        // بحث بالموظف
         var results=[];
         data.forEach(function(r){
           (r.employees||[]).forEach(function(e){
@@ -1501,9 +1513,11 @@ function searchEmpInMonth(name){
         var statsHTML=Object.keys(stats).map(function(s){
           return '<div class="pill '+(pm[s]||'pill-p')+'">'+s+': '+stats[s]+'</div>';
         }).join('');
+
         el.innerHTML=
-          '<div class="sec">نتائج "'+name+'" — '+results.length+' يوم هذا الشهر</div>'+
-          '<div class="pills" style="margin-bottom:12px">'+statsHTML+'</div>'+
+          '<div class="sec">نتائج "'+name+'" — '+results.length+' يوم — '+monthLabel+'</div>'+
+          '<div class="pills" style="margin-bottom:8px">'+statsHTML+'</div>'+
+          exportBtns+
           results.map(function(r){
             return '<div class="rec-card">'+
               '<div class="rec-head"><div>'+
@@ -1515,6 +1529,25 @@ function searchEmpInMonth(name){
               (r.emp.note?'<div style="font-size:12px;color:var(--muted);margin-top:4px">ملاحظة: '+r.emp.note+'</div>':'')+
             '</div>';
           }).join('');
+
+        // تحويل نتائج الموظف لصيغة تقارير للتصدير
+        var empAsRecords=[];
+        var dayMap={};
+        results.forEach(function(r){
+          if(!dayMap[r.dateISO]){
+            dayMap[r.dateISO]={
+              id:r.dateISO,station:r.station,manager:r.manager,
+              report_date:r.date,report_date_iso:r.dateISO,
+              report_time:r.time,employees:[]
+            };
+            empAsRecords.push(dayMap[r.dateISO]);
+          }
+          dayMap[r.dateISO].employees.push(r.emp);
+        });
+
+        document.getElementById('srchExpExcel').onclick=function(){buildExcel(empAsRecords,null,true);};
+        document.getElementById('srchExpPdf').onclick=function(){buildPDF(empAsRecords,name+' - '+monthLabel);};
+        document.getElementById('srchExpWa').onclick=function(){copyReport(empAsRecords,name+' - '+monthLabel);};
       }
     }
   );
@@ -1720,7 +1753,17 @@ function renderRecs(){
     return;
   }
   var pm={'حاضر':'pill-p','راحة':'pill-r','عطلة':'pill-h','مرضي':'pill-m','اجازة':'pill-v','انقطاع':'pill-a'};
-  el.innerHTML=data.map(function(r){
+  var dateLabel=document.getElementById('dateInput').value||todayISO;
+  window._filteredData=data;
+
+  var searchExportHTML=(searchEmp||filterStatus!=='all')?
+    '<div class="row" style="margin-bottom:10px;gap:8px">'+
+      '<button class="btn btn-green" onclick="buildExcel(window._filteredData,\''+dateLabel+'\',false)">&#128196; Excel النتائج</button>'+
+      '<button class="btn btn-ghost" onclick="buildPDF(window._filteredData,\''+dateLabel+'\')">&#128209; PDF النتائج</button>'+
+      '<button class="btn btn-ghost" onclick="copyReport(window._filteredData,\''+dateLabel+'\')">&#128203; نسخ للواتساب</button>'+
+    '</div>':'';
+
+  el.innerHTML=searchExportHTML+data.map(function(r){
     var emps=filterStatus!=='all'?(r.employees||[]).filter(function(e){return e.status===filterStatus||searchEmp&&e.name.indexOf(searchEmp)!==-1;}):(r.employees||[]);
     var pills=emps.map(function(e){
       var hl=searchEmp&&e.name.indexOf(searchEmp)!==-1?'outline:2px solid var(--blue);':'';
@@ -1992,57 +2035,4 @@ function loadStats(){
 
     el.innerHTML=sts.map(function(s){
       var sd=dataMap[s.name]||{};
-      var pp=(s.employees||[]).indexOf(s.manager)!==-1?(s.employees||[]):[s.manager].concat(s.employees||[]).filter(Boolean);
-      if(!pp.length)pp=Object.keys(sd);
-      if(!pp.length)return '';
-
-      var totalPresent=0,totalAll=0;
-      var rowsHTML=pp.map(function(name){
-        var ed=sd[name]||{present:0,total:0};
-        totalPresent+=ed.present;totalAll+=ed.total;
-        var pct=ed.total?Math.round(ed.present/ed.total*100):0;
-        var color=pct>=90?'var(--green)':pct>=75?'var(--gold)':'var(--red)';
-        return '<div class="stat-emp-row">'+
-          '<div class="stat-emp-top">'+
-            '<span class="stat-emp-name">'+name+'</span>'+
-            '<span class="stat-emp-pct" style="color:'+color+'">'+pct+'% ('+ed.present+'/'+ed.total+')</span>'+
-          '</div>'+
-          '<div class="stat-bar"><div class="stat-bar-fill" style="width:'+pct+'%;background:'+color+'"></div></div>'+
-        '</div>';
-      }).join('');
-
-      var avgPct=totalAll?Math.round(totalPresent/totalAll*100):0;
-      return '<div class="stat-station">'+
-        '<div class="stat-station-hdr">'+
-          '<div class="stat-station-name">'+s.name+'</div>'+
-          '<div class="stat-station-avg">متوسط الحضور: '+avgPct+'%</div>'+
-        '</div>'+
-        rowsHTML+
-      '</div>';
-    }).join('');
-  });
-}
-
-function renderStatsChart(labels,data){
-  var card=document.getElementById('statsChartCard');
-  var canvas=document.getElementById('statsChart');
-  if(!card||!canvas)return;
-  if(typeof Chart==='undefined'||!labels.length){card.style.display='none';return;}
-  card.style.display='block';
-  if(statsChartInstance){statsChartInstance.destroy();statsChartInstance=null;}
-  var muted=getComputedStyle(document.body).getPropertyValue('--muted').trim()||'#888';
-  var border=getComputedStyle(document.body).getPropertyValue('--border').trim()||'rgba(255,255,255,.07)';
-  var blue=getComputedStyle(document.body).getPropertyValue('--blue').trim()||'#3b82f6';
-  statsChartInstance=new Chart(canvas.getContext('2d'),{
-    type:'line',
-    data:{
-      labels:labels,
-      datasets:[{
-        label:'نسبة الحضور %',
-        data:data,
-        borderColor:blue,
-        backgroundColor:blue+'26',
-        fill:true,
-        tension:.3,
-        pointRadius:3,
-        pointBackgroundColor
+      var pp=(s.employees||[]).indexOf(s.mana
