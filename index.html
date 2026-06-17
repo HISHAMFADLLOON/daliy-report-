@@ -716,15 +716,47 @@ function isLoggedIn(){
   if(localStorage.getItem('att_sess')!=='1')return false;
   return checkSessionOnLoad();
 }
-document.getElementById('loginBtn').addEventListener('click',doLogin);
-document.getElementById('lPass').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
-document.getElementById('lUser').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('lPass').focus();});
-document.getElementById('logoutBtn').addEventListener('click',function(){
-  localStorage.removeItem('att_sess');
-  localStorage.removeItem('att_role');
-  localStorage.removeItem('att_last_active');
-  clearTimeout(sessionTimer);
-  location.reload();
+
+document.addEventListener('DOMContentLoaded', function(){
+  checkLoginLock();
+  document.getElementById('loginBtn').addEventListener('click',doLogin);
+  document.getElementById('lPass').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
+  document.getElementById('lUser').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('lPass').focus();});
+  document.getElementById('logoutBtn').addEventListener('click',function(){
+    localStorage.removeItem('att_sess');
+    localStorage.removeItem('att_role');
+    localStorage.removeItem('att_last_active');
+    clearTimeout(sessionTimer);
+    location.reload();
+  });
+
+  // ── BOOT ──
+  var _p=new URLSearchParams(location.search);
+  var shortId=_p.get('id');
+  var stName=_p.get('st')?decodeURIComponent(_p.get('st')):'';
+
+  if(shortId){
+    document.getElementById('loginWrap').style.display='none';
+    document.getElementById('mgrUI').style.display='block';
+    document.getElementById('mgrTitle').textContent=stName||'جاري التحميل...';
+    document.getElementById('mgrBody').innerHTML='<div class="loading">&#9203; جاري التحميل...</div>';
+    sbGet('manager_links','id=eq.'+encodeURIComponent(shortId)+'&select=*',function(rows){
+      if(!rows||!rows.length){showLocked('الرابط غير موجود');return;}
+      var lnk=rows[0];
+      if(lnk.used_date===todayISO){showLocked();return;}
+      showMgr({
+        stationName:lnk.station_name,
+        managerName:lnk.manager_name,
+        employees:Array.isArray(lnk.employees)?lnk.employees:[],
+        managerCode:lnk.manager_code||''
+      },shortId);
+    });
+  } else if(isLoggedIn()){
+    document.getElementById('loginWrap').style.display='none';
+    document.getElementById('adminUI').style.display='block';
+    resetSessionTimer();
+    initAdmin();
+  }
 });
 
 function sha256(text){
@@ -760,10 +792,6 @@ function checkLoginLock(){
   return false;
 }
 
-// فحص القفل عند تحميل الصفحة
-document.addEventListener('DOMContentLoaded', function(){
-  checkLoginLock();
-});
 // فحص دوري كل ثانية لو مقفول
 setInterval(function(){
   if(getLoginState().lockedUntil) checkLoginLock();
@@ -811,34 +839,6 @@ function doLogin(){
         document.getElementById('lErr').textContent='تأكد من الاتصال بالانترنت';
       });
   });
-}
-
-// ── BOOT ──
-var _p      = new URLSearchParams(location.search);
-var shortId = _p.get('id');
-var stName  = _p.get('st') ? decodeURIComponent(_p.get('st')) : '';
-
-if(shortId){
-  document.getElementById('loginWrap').style.display='none';
-  document.getElementById('mgrUI').style.display='block';
-  document.getElementById('mgrTitle').textContent=stName||'جاري التحميل...';
-  document.getElementById('mgrBody').innerHTML='<div class="loading">&#9203; جاري التحميل...</div>';
-  sbGet('manager_links','id=eq.'+encodeURIComponent(shortId)+'&select=*',function(rows){
-    if(!rows||!rows.length){showLocked('الرابط غير موجود');return;}
-    var lnk=rows[0];
-    if(lnk.used_date===todayISO){showLocked();return;}
-    showMgr({
-      stationName:lnk.station_name,
-      managerName:lnk.manager_name,
-      employees:Array.isArray(lnk.employees)?lnk.employees:[],
-      managerCode:lnk.manager_code||''
-    },shortId);
-  });
-} else if(isLoggedIn()){
-  document.getElementById('loginWrap').style.display='none';
-  document.getElementById('adminUI').style.display='block';
-  resetSessionTimer();
-  initAdmin();
 }
 
 var dashTimer=null;
@@ -2035,5 +2035,4 @@ function loadStats(){
       return {name:n,manager:'',employees:Object.keys(dataMap[n]||{})};
     });
 
-    el.innerHTML=sts.map(function(s){
-      var sd=da
+    el.innerHTML=sts.map(f
