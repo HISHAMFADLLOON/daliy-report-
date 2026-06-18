@@ -683,7 +683,7 @@ function isLoggedIn(){
   return localStorage.getItem('att_sess')==='1';
 }
 
-window.addEventListener('load', function(){
+function _initApp(){
   applyTheme();
   document.getElementById('themeBtn').addEventListener('click', toggleTheme);
   document.getElementById('themeBtnMgr').addEventListener('click', toggleTheme);
@@ -722,7 +722,7 @@ window.addEventListener('load', function(){
     document.getElementById('adminUI').style.display='block';
     initAdmin();
   }
-});
+}
 
 function sha256(text){
   var enc=new TextEncoder().encode(text);
@@ -2027,4 +2027,5 @@ function renderStatsChart(labels,data){
 
 // ── TOAST ──
 function toast(msg,type){
-  var t=document.getElementById('to
+  var t=document.getElementById('toast');
+  t.textContent=ms
