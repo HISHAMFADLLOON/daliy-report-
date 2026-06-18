@@ -612,9 +612,6 @@ function toggleTheme(){
   localStorage.setItem('att_theme', isDark?'dark':'light');
   applyTheme();
 }
-applyTheme();
-document.getElementById('themeBtn').addEventListener('click', toggleTheme);
-document.getElementById('themeBtnMgr').addEventListener('click', toggleTheme);
 
 // ── PWA: SERVICE WORKER ──
 if('serviceWorker' in navigator){
@@ -687,6 +684,9 @@ function isLoggedIn(){
 }
 
 document.addEventListener('DOMContentLoaded', function(){
+  applyTheme();
+  document.getElementById('themeBtn').addEventListener('click', toggleTheme);
+  document.getElementById('themeBtnMgr').addEventListener('click', toggleTheme);
   document.getElementById('loginBtn').addEventListener('click',doLogin);
   document.getElementById('lPass').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
   document.getElementById('lUser').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('lPass').focus();});
@@ -2027,5 +2027,4 @@ function renderStatsChart(labels,data){
 
 // ── TOAST ──
 function toast(msg,type){
-  var t=document.getElementById('toast');
-  t
+  var t=document.getElementById('toast'
