@@ -583,7 +583,7 @@ input[type=date]:focus{border-color:var(--blue);}
 'use strict';
 
 var SB_URL    = 'https://plvjfmkbcmulfubiiwyw.supabase.co';
-var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsdmpmbWtiY211bGZ1Ymlpd3l3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MTgyMTcsImV4cCI6MjA5NjA5NDIxN30.xEDLYbOiWfEF177ob8eCWQ3lh43rn-OZAweMdn4vkzM';
+var SB_KEY    = 'sb_publishable_L6fcrQBAOsJv9Wh04wP7ww_h0Xxsl0H';
 var BOT_TOKEN = '8910031215:AAFUya-l3VyoXAOMlvxd4zb6DpUGFhiDEw8';
 var CHAT_ID   = '870811910';
 // USERS are now stored in Supabase app_users table
@@ -612,51 +612,18 @@ function toggleTheme(){
   localStorage.setItem('att_theme', isDark?'dark':'light');
   applyTheme();
 }
-applyTheme();
-document.getElementById('themeBtn').addEventListener('click', toggleTheme);
-document.getElementById('themeBtnMgr').addEventListener('click', toggleTheme);
 
-// ── SESSION TIMEOUT (ساعتين بدون نشاط) ──
-var SESSION_TIMEOUT = 2 * 60 * 60 * 1000; // ساعتين بالميلي ثانية
 var sessionTimer = null;
+function resetSessionTimer(){}
 
-function resetSessionTimer(){
-  if(!isLoggedIn())return;
-  localStorage.setItem('att_last_active', Date.now());
-  clearTimeout(sessionTimer);
-  sessionTimer = setTimeout(function(){
-    toast('انتهت الجلسة — سيتم تسجيل الخروج تلقائياً','warn');
-    setTimeout(function(){
-      localStorage.removeItem('att_sess');
-      localStorage.removeItem('att_role');
-      localStorage.removeItem('att_last_active');
-      location.reload();
-    }, 2000);
-  }, SESSION_TIMEOUT);
-}
-
-function checkSessionOnLoad(){
-  var lastActive = parseInt(localStorage.getItem('att_last_active')||'0');
-  if(lastActive && Date.now() - lastActive > SESSION_TIMEOUT){
-    localStorage.removeItem('att_sess');
-    localStorage.removeItem('att_role');
-    localStorage.removeItem('att_last_active');
-    return false;
-  }
-  return true;
-}
-
-// تتبع نشاط المستخدم
-['click','keydown','touchstart','scroll'].forEach(function(ev){
-  document.addEventListener(ev, resetSessionTimer, {passive:true});
-});
-
-// ── PWA: SERVICE WORKER ──
+// إلغاء الـ Service Worker القديم لو موجود
 if('serviceWorker' in navigator){
-  window.addEventListener('load', function(){
-    navigator.serviceWorker.register('./sw.js').catch(function(){});
+  navigator.serviceWorker.getRegistrations().then(function(regs){
+    regs.forEach(function(reg){reg.unregister();});
   });
 }
+
+// ── SUPABASE ──
 
 // ── SUPABASE ──
 function sbGet(table,q,cb){
@@ -713,20 +680,19 @@ function delStationDB(id){sbDel('stations','id=eq.'+id);}
 
 // ── LOGIN ──
 function isLoggedIn(){
-  if(localStorage.getItem('att_sess')!=='1')return false;
-  return checkSessionOnLoad();
+  return localStorage.getItem('att_sess')==='1';
 }
 
-document.addEventListener('DOMContentLoaded', function(){
-  checkLoginLock();
+function _initApp(){
+  applyTheme();
+  document.getElementById('themeBtn').addEventListener('click', toggleTheme);
+  document.getElementById('themeBtnMgr').addEventListener('click', toggleTheme);
   document.getElementById('loginBtn').addEventListener('click',doLogin);
   document.getElementById('lPass').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
   document.getElementById('lUser').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('lPass').focus();});
   document.getElementById('logoutBtn').addEventListener('click',function(){
     localStorage.removeItem('att_sess');
     localStorage.removeItem('att_role');
-    localStorage.removeItem('att_last_active');
-    clearTimeout(sessionTimer);
     location.reload();
   });
 
@@ -754,90 +720,29 @@ document.addEventListener('DOMContentLoaded', function(){
   } else if(isLoggedIn()){
     document.getElementById('loginWrap').style.display='none';
     document.getElementById('adminUI').style.display='block';
-    resetSessionTimer();
     initAdmin();
   }
-});
-
-function sha256(text){
-  var enc=new TextEncoder().encode(text);
-  return crypto.subtle.digest('SHA-256',enc).then(function(buf){
-    return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
-  });
 }
-
-// ── LOGIN ATTEMPTS ──
-var MAX_ATTEMPTS = 5;
-var LOCKOUT_MS   = 10 * 60 * 1000; // 10 دقائق
-
-function getLoginState(){
-  return {
-    attempts: parseInt(localStorage.getItem('login_attempts')||'0'),
-    lockedUntil: parseInt(localStorage.getItem('login_locked')||'0')
-  };
-}
-function checkLoginLock(){
-  var s=getLoginState();
-  if(s.lockedUntil && Date.now() < s.lockedUntil){
-    var mins=Math.ceil((s.lockedUntil-Date.now())/60000);
-    document.getElementById('lErr').textContent='تم تجاوز عدد المحاولات — انتظر '+mins+' دقيقة';
-    document.getElementById('loginBtn').disabled=true;
-    return true;
-  }
-  if(s.lockedUntil && Date.now() >= s.lockedUntil){
-    localStorage.removeItem('login_attempts');
-    localStorage.removeItem('login_locked');
-  }
-  document.getElementById('loginBtn').disabled=false;
-  return false;
-}
-
-// فحص دوري كل ثانية لو مقفول
-setInterval(function(){
-  if(getLoginState().lockedUntil) checkLoginLock();
-},1000);
 
 function doLogin(){
-  if(checkLoginLock())return;
   var u=document.getElementById('lUser').value.trim();
   var p=document.getElementById('lPass').value;
   if(!u||!p){toast('ادخل اسم المستخدم وكلمة المرور','warn');return;}
   var btn=document.getElementById('loginBtn');
   btn.textContent='جاري التحقق...';btn.disabled=true;
-  sha256(p).then(function(hash){
-    fetch(SB_URL+'/rest/v1/rpc/verify_login',{method:'POST',headers:SBH,
-      body:JSON.stringify({p_username:u,p_hash:hash})})
-      .then(function(r){return r.ok?r.json():null;})
-      .then(function(role){
-        btn.textContent='دخول';btn.disabled=false;
-        if(role){
-          localStorage.removeItem('login_attempts');
-          localStorage.removeItem('login_locked');
-          localStorage.setItem('att_sess','1');
-          localStorage.setItem('att_user',u);
-          localStorage.setItem('att_role',role);
-          localStorage.setItem('att_last_active', Date.now());
-          document.getElementById('loginWrap').style.display='none';
-          document.getElementById('adminUI').style.display='block';
-          resetSessionTimer();
-          initAdmin();
-        } else {
-          var attempts=getLoginState().attempts+1;
-          localStorage.setItem('login_attempts', attempts);
-          if(attempts >= MAX_ATTEMPTS){
-            localStorage.setItem('login_locked', Date.now()+LOCKOUT_MS);
-            document.getElementById('lErr').textContent='تم تجاوز عدد المحاولات — انتظر 10 دقائق';
-            btn.disabled=true;
-          } else {
-            document.getElementById('lErr').textContent=
-              'اسم المستخدم او كلمة المرور غلط ('+(MAX_ATTEMPTS-attempts)+' محاولات متبقية)';
-          }
-          document.getElementById('lPass').value='';
-        }
-      }).catch(function(){
-        btn.textContent='دخول';btn.disabled=false;
-        document.getElementById('lErr').textContent='تأكد من الاتصال بالانترنت';
-      });
+  sbGet('app_users','username=eq.'+encodeURIComponent(u)+'&password=eq.'+encodeURIComponent(p)+'&select=username,role',function(rows){
+    btn.textContent='دخول';btn.disabled=false;
+    if(rows&&rows.length){
+      localStorage.setItem('att_sess','1');
+      localStorage.setItem('att_user',u);
+      localStorage.setItem('att_role',rows[0].role||'supervisor');
+      document.getElementById('loginWrap').style.display='none';
+      document.getElementById('adminUI').style.display='block';
+      initAdmin();
+    } else {
+      document.getElementById('lErr').textContent='اسم المستخدم او كلمة المرور غلط';
+      document.getElementById('lPass').value='';
+    }
   });
 }
 
@@ -2035,4 +1940,87 @@ function loadStats(){
       return {name:n,manager:'',employees:Object.keys(dataMap[n]||{})};
     });
 
-    el.innerHTML=sts.map(f
+    el.innerHTML=sts.map(function(s){
+      var sd=dataMap[s.name]||{};
+      var pp=(s.employees||[]).indexOf(s.manager)!==-1?(s.employees||[]):[s.manager].concat(s.employees||[]).filter(Boolean);
+      if(!pp.length)pp=Object.keys(sd);
+      if(!pp.length)return '';
+
+      var totalPresent=0,totalAll=0;
+      var rowsHTML=pp.map(function(name){
+        var ed=sd[name]||{present:0,total:0};
+        totalPresent+=ed.present;totalAll+=ed.total;
+        var pct=ed.total?Math.round(ed.present/ed.total*100):0;
+        var color=pct>=90?'var(--green)':pct>=75?'var(--gold)':'var(--red)';
+        return '<div class="stat-emp-row">'+
+          '<div class="stat-emp-top">'+
+            '<span class="stat-emp-name">'+name+'</span>'+
+            '<span class="stat-emp-pct" style="color:'+color+'">'+pct+'% ('+ed.present+'/'+ed.total+')</span>'+
+          '</div>'+
+          '<div class="stat-bar"><div class="stat-bar-fill" style="width:'+pct+'%;background:'+color+'"></div></div>'+
+        '</div>';
+      }).join('');
+
+      var avgPct=totalAll?Math.round(totalPresent/totalAll*100):0;
+      return '<div class="stat-station">'+
+        '<div class="stat-station-hdr">'+
+          '<div class="stat-station-name">'+s.name+'</div>'+
+          '<div class="stat-station-avg">متوسط الحضور: '+avgPct+'%</div>'+
+        '</div>'+
+        rowsHTML+
+      '</div>';
+    }).join('');
+  });
+}
+
+function renderStatsChart(labels,data){
+  var card=document.getElementById('statsChartCard');
+  var canvas=document.getElementById('statsChart');
+  if(!card||!canvas)return;
+  if(typeof Chart==='undefined'||!labels.length){card.style.display='none';return;}
+  card.style.display='block';
+  if(statsChartInstance){statsChartInstance.destroy();statsChartInstance=null;}
+  var muted=getComputedStyle(document.body).getPropertyValue('--muted').trim()||'#888';
+  var border=getComputedStyle(document.body).getPropertyValue('--border').trim()||'rgba(255,255,255,.07)';
+  var blue=getComputedStyle(document.body).getPropertyValue('--blue').trim()||'#3b82f6';
+  statsChartInstance=new Chart(canvas.getContext('2d'),{
+    type:'line',
+    data:{
+      labels:labels,
+      datasets:[{
+        label:'نسبة الحضور %',
+        data:data,
+        borderColor:blue,
+        backgroundColor:blue+'26',
+        fill:true,
+        tension:.3,
+        pointRadius:3,
+        pointBackgroundColor:blue
+      }]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      scales:{
+        y:{min:0,max:100,ticks:{color:muted,callback:function(v){return v+'%';}},grid:{color:border}},
+        x:{ticks:{color:muted},grid:{color:border}}
+      },
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.parsed.y+'%';}}}}
+    }
+  });
+}
+
+// ── TOAST ──
+function toast(msg,type){
+  var t=document.getElementById('toast');
+  t.textContent=msg;t.className='toast show '+(type||'ok');
+  setTimeout(function(){t.classList.remove('show');},2600);
+}
+
+})();
+</script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script>_initApp();</script>
+</body>
+</html>
