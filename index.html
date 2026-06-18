@@ -356,21 +356,8 @@ input[type=date]:focus{border-color:var(--blue);}
 </head>
 <body>
 
-<!-- LOGIN -->
-<div id="loginWrap" class="login-wrap">
-  <div class="login-box">
-    <div class="login-icon">&#128274;</div>
-    <div class="login-title">لوحة المسؤول</div>
-    <div class="login-sub">ادخل بياناتك للدخول</div>
-    <input type="text"     id="lUser" class="login-input" placeholder="اسم المستخدم">
-    <input type="password" id="lPass" class="login-input" placeholder="كلمة المرور">
-    <button class="login-btn" id="loginBtn">دخول</button>
-    <div class="login-err" id="lErr"></div>
-  </div>
-</div>
-
 <!-- ADMIN -->
-<div id="adminUI" style="display:none">
+<div id="adminUI">
   <div class="hdr">
     <div class="hdr-l">
       <div class="hdr-icon">&#9875;</div>
@@ -381,8 +368,7 @@ input[type=date]:focus{border-color:var(--blue);}
     </div>
     <div class="hdr-r">
       <button class="theme-btn" id="themeBtn" title="تغيير الوضع">&#9788;</button>
-      <div class="badge badge-gold">مسؤول</div>
-      <button class="btn-logout" id="logoutBtn">خروج</button>
+
     </div>
   </div>
   <div class="tabs">
@@ -393,12 +379,10 @@ input[type=date]:focus{border-color:var(--blue);}
     <button class="tab"    id="tab-stats">&#128200; احصائيات</button>
   </div>
 
-  <!-- DASHBOARD -->
   <div class="view on" id="view-dash">
     <div id="dashBox"><div class="loading">&#9203; جاري التحميل...</div></div>
   </div>
 
-  <!-- STATIONS -->
   <div class="view" id="view-stations">
     <div class="sec">اضافة محطة جديدة</div>
     <div class="row">
@@ -411,7 +395,6 @@ input[type=date]:focus{border-color:var(--blue);}
     <div id="stList"><div class="loading">&#9203; جاري التحميل...</div></div>
   </div>
 
-  <!-- LINKS -->
   <div class="view" id="view-links">
     <div class="info-box ib-green">
       &#128274; كل رابط يشتغل مرة واحدة في اليوم فقط — في اليوم التالي يشتغل تلقائيا من جديد
@@ -419,41 +402,34 @@ input[type=date]:focus{border-color:var(--blue);}
     <div id="linksBox"></div>
   </div>
 
-  <!-- RECORDS -->
   <div class="view" id="view-records">
-    <!-- إحصاء سريع -->
     <div class="stats">
       <div class="stat"><div class="stat-n b" id="sN">0</div><div class="stat-l">تقارير</div></div>
       <div class="stat"><div class="stat-n g" id="sT">0</div><div class="stat-l">محطات</div></div>
       <div class="stat"><div class="stat-n gr" id="sS">0</div><div class="stat-l">موظفين</div></div>
     </div>
-    <!-- إحصاء الحالات السريع -->
     <div class="stats" id="statusStats" style="display:none">
       <div class="stat"><div class="stat-n" style="color:var(--green)" id="ssP">0</div><div class="stat-l">حاضر</div></div>
       <div class="stat"><div class="stat-n" style="color:var(--gold)" id="ssR">0</div><div class="stat-l">راحة</div></div>
       <div class="stat"><div class="stat-n" style="color:var(--red)" id="ssA">0</div><div class="stat-l">انقطاع</div></div>
     </div>
-    <!-- بحث بالتاريخ -->
     <div class="row" style="margin-bottom:8px">
       <input type="date" id="dateInput">
       <button class="btn btn-blue"  id="searchBtn">بحث</button>
       <button class="btn btn-ghost" id="todayBtn">اليوم</button>
     </div>
-    <!-- مقارنة يومين -->
     <div class="row" style="margin-bottom:12px;align-items:center">
       <input type="date" id="cmpDate1" style="flex:1">
       <span style="color:var(--muted);font-size:13px;white-space:nowrap">مقارنة مع</span>
       <input type="date" id="cmpDate2" style="flex:1">
       <button class="btn btn-ghost" id="cmpBtn">&#128260;</button>
     </div>
-    <!-- بحث بالاسم -->
     <div class="row" style="margin-bottom:8px">
       <input type="text" id="empSearch" placeholder="&#128269; اسم موظف أو محطة">
       <button class="btn btn-blue" id="empSearchDayBtn">بحث في اليوم</button>
       <button class="btn btn-ghost" id="empSearchMonBtn">بحث في الشهر</button>
     </div>
     <div id="empSearchResults"></div>
-    <!-- فلترة بالحالة -->
     <div class="chips" id="statusChips" style="margin-bottom:8px">
       <button class="chip on" onclick="window._setStatus('all')">الكل</button>
       <button class="chip" onclick="window._setStatus('حاضر')">✅ حاضر</button>
@@ -473,12 +449,10 @@ input[type=date]:focus{border-color:var(--blue);}
       <button class="btn btn-ghost" style="grid-column:1/-1" id="auditBtn">&#128203; سجل التدقيق</button>
       <button class="btn btn-red btn-del" id="delAllBtn">&#128465; حذف السجلات المعروضة</button>
     </div>
-    <!-- منطقة المقارنة -->
     <div id="cmpBox" style="display:none"></div>
     <div id="recList"></div>
   </div>
 
-  <!-- STATS -->
   <div class="view" id="view-stats">
     <div class="info-box ib-blue">
       &#128200; نسبة الحضور لكل موظف خلال شهر <span id="statsMonth"></span>
@@ -525,14 +499,6 @@ input[type=date]:focus{border-color:var(--blue);}
   <div id="mgrBody"></div>
   <div class="footer">
     Powered by <span>Hisham Fadloun</span>
-    <div class="footer-icons">
-      <a class="footer-icon fi-tg" href="https://t.me/x01hn" target="_blank">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="white"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
-      </a>
-      <a class="footer-icon fi-wa" href="https://wa.me/2001550623801" target="_blank">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-      </a>
-    </div>
   </div>
 </div>
 
@@ -578,15 +544,16 @@ input[type=date]:focus{border-color:var(--blue);}
 
 <div class="toast" id="toast"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 (function(){
 'use strict';
 
+// ══ التعديل الرئيسي: API KEY الصح ══
 var SB_URL    = 'https://plvjfmkbcmulfubiiwyw.supabase.co';
-var SB_KEY    = 'sb_publishable_L6fcrQBAOsJv9Wh04wP7ww_h0Xxsl0H';
+var SB_KEY    = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsdmpmbWtiY211bGZ1Ymlpd3l3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MTgyMTcsImV4cCI6MjA5NjA5NDIxN30.xEDLYbOiWfEF177ob8eCWQ3lh43rn-OZAweMdn4vkzM';
 var BOT_TOKEN = '8910031215:AAFUya-l3VyoXAOMlvxd4zb6DpUGFhiDEw8';
 var CHAT_ID   = '870811910';
-// USERS are now stored in Supabase app_users table
 var SBH       = {'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY};
 
 var stations  = [];
@@ -612,18 +579,23 @@ function toggleTheme(){
   localStorage.setItem('att_theme', isDark?'dark':'light');
   applyTheme();
 }
+applyTheme();
+document.getElementById('themeBtn').addEventListener('click', toggleTheme);
+document.getElementById('themeBtnMgr').addEventListener('click', toggleTheme);
 
-var sessionTimer = null;
-function resetSessionTimer(){}
-
-// إلغاء الـ Service Worker القديم لو موجود
-if('serviceWorker' in navigator){
-  navigator.serviceWorker.getRegistrations().then(function(regs){
-    regs.forEach(function(reg){reg.unregister();});
-  });
+// ── TOAST ──
+function toast(msg,type){
+  var el=document.getElementById('toast');
+  el.textContent=msg;el.className='toast '+(type||'ok');
+  setTimeout(function(){el.classList.add('show');},10);
+  setTimeout(function(){el.classList.remove('show');},3000);
 }
 
-// ── SUPABASE ──
+if('serviceWorker' in navigator){
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('./sw.js').catch(function(){});
+  });
+}
 
 // ── SUPABASE ──
 function sbGet(table,q,cb){
@@ -646,7 +618,6 @@ function sbDel(table,q){
     .then(function(r){return r.ok;}).catch(function(){return false;});
 }
 
-// ── AUDIT LOG ──
 function logAudit(action,details){
   var u=localStorage.getItem('att_user')||'?';
   sbPost('audit_log',{username:u,action:action,details:details});
@@ -679,30 +650,14 @@ function updateManagerLink(s){
 function delStationDB(id){sbDel('stations','id=eq.'+id);}
 
 // ── LOGIN ──
-function isLoggedIn(){
-  return localStorage.getItem('att_sess')==='1';
-}
 
-function _initApp(){
-  applyTheme();
-  document.getElementById('themeBtn').addEventListener('click', toggleTheme);
-  document.getElementById('themeBtnMgr').addEventListener('click', toggleTheme);
-  document.getElementById('loginBtn').addEventListener('click',doLogin);
-  document.getElementById('lPass').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
-  document.getElementById('lUser').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('lPass').focus();});
-  document.getElementById('logoutBtn').addEventListener('click',function(){
-    localStorage.removeItem('att_sess');
-    localStorage.removeItem('att_role');
-    location.reload();
-  });
+document.addEventListener('DOMContentLoaded', function(){
 
-  // ── BOOT ──
   var _p=new URLSearchParams(location.search);
   var shortId=_p.get('id');
   var stName=_p.get('st')?decodeURIComponent(_p.get('st')):'';
 
   if(shortId){
-    document.getElementById('loginWrap').style.display='none';
     document.getElementById('mgrUI').style.display='block';
     document.getElementById('mgrTitle').textContent=stName||'جاري التحميل...';
     document.getElementById('mgrBody').innerHTML='<div class="loading">&#9203; جاري التحميل...</div>';
@@ -717,12 +672,10 @@ function _initApp(){
         managerCode:lnk.manager_code||''
       },shortId);
     });
-  } else if(isLoggedIn()){
-    document.getElementById('loginWrap').style.display='none';
-    document.getElementById('adminUI').style.display='block';
+  } else {
     initAdmin();
   }
-}
+});
 
 function sha256(text){
   var enc=new TextEncoder().encode(text);
@@ -731,35 +684,12 @@ function sha256(text){
   });
 }
 
-function doLogin(){
-  var u=document.getElementById('lUser').value.trim();
-  var p=document.getElementById('lPass').value;
-  if(!u||!p){toast('ادخل اسم المستخدم وكلمة المرور','warn');return;}
-  var btn=document.getElementById('loginBtn');
-  btn.textContent='جاري التحقق...';btn.disabled=true;
-  sha256(p).then(function(hash){
-    fetch(SB_URL+'/rest/v1/rpc/verify_login',{method:'POST',headers:SBH,
-      body:JSON.stringify({p_username:u,p_hash:hash})})
-      .then(function(r){return r.ok?r.json():null;})
-      .then(function(role){
-        btn.textContent='دخول';btn.disabled=false;
-        if(role){
-          localStorage.setItem('att_sess','1');
-          localStorage.setItem('att_user',u);
-          localStorage.setItem('att_role',role);
-          document.getElementById('loginWrap').style.display='none';
-          document.getElementById('adminUI').style.display='block';
-          initAdmin();
-        } else {
-          document.getElementById('lErr').textContent='اسم المستخدم او كلمة المرور غلط';
-          document.getElementById('lPass').value='';
-        }
-      }).catch(function(){
-        btn.textContent='دخول';btn.disabled=false;
-        document.getElementById('lErr').textContent='تأكد من الاتصال بالانترنت';
-      });
-  });
+;
 }
+
+  if(s.lockedUntil && Date.now() >= s.lockedUntil){
+    
+  
 
 var dashTimer=null;
 function initAdmin(){
@@ -770,14 +700,12 @@ function initAdmin(){
     var ab=document.getElementById('auditBtn');
     if(ab)ab.style.display='none';
   }
-  // تحديث تلقائي للداشبورد كل 5 دقائق لو الصفحة مفتوحة
   dashTimer=setInterval(function(){
     var dashView=document.getElementById('view-dash');
     if(dashView&&dashView.classList.contains('on'))loadDash();
   },5*60*1000);
 }
 
-// ── LOCKED ──
 function showLocked(msg){
   document.getElementById('mgrTitle').textContent='رابط مستخدم';
   document.getElementById('mgrSub').textContent='';
@@ -787,7 +715,6 @@ function showLocked(msg){
     '<div class="cs-sub">'+(msg||'تم تسجيل الحضور مسبقا.<br>تواصل مع المسؤول للحصول على رابط جديد.')+'</div></div>';
 }
 
-// ── DASHBOARD ──
 function loadDash(){
   var el=document.getElementById('dashBox');if(!el)return;
   el.innerHTML='<div class="loading">&#9203; جاري التحميل...</div>';
@@ -805,66 +732,38 @@ function loadDash(){
     var lastRec=data[0];
     var attendPct=totalAll?Math.round(totalPresent/totalAll*100):0;
     var barColor=attendPct>=90?'var(--green)':attendPct>=70?'var(--gold)':'var(--red)';
-
     var reportedHTML=reported.map(function(s){
       var rec=data.find(function(r){return r.station===s.name;});
-      return '<div class="dash-station-row done">'+
-        '<div>'+
-          '<div class="dash-station-name">'+s.name+'</div>'+
-          '<div class="dash-station-time">المدير: '+s.manager+'</div>'+
-        '</div>'+
-        '<div style="text-align:left">'+
-          '<div style="color:var(--green);font-weight:700;font-size:12px">✅ سجّل</div>'+
-          '<div class="dash-station-time">'+(rec?rec.report_time:'')+'</div>'+
-        '</div>'+
-      '</div>';
+      return '<div class="dash-station-row done"><div><div class="dash-station-name">'+s.name+'</div>'+
+        '<div class="dash-station-time">المدير: '+s.manager+'</div></div>'+
+        '<div style="text-align:left"><div style="color:var(--green);font-weight:700;font-size:12px">✅ سجّل</div>'+
+        '<div class="dash-station-time">'+(rec?rec.report_time:'')+'</div></div></div>';
     }).join('');
-
     var pendingHTML=pending.map(function(s){
-      return '<div class="dash-station-row pending">'+
-        '<div>'+
-          '<div class="dash-station-name">'+s.name+'</div>'+
-          '<div class="dash-station-time">المدير: '+s.manager+'</div>'+
-        '</div>'+
-        '<div style="color:var(--red);font-weight:700;font-size:12px">❌ لم يسجّل</div>'+
-      '</div>';
+      return '<div class="dash-station-row pending"><div><div class="dash-station-name">'+s.name+'</div>'+
+        '<div class="dash-station-time">المدير: '+s.manager+'</div></div>'+
+        '<div style="color:var(--red);font-weight:700;font-size:12px">❌ لم يسجّل</div></div>';
     }).join('');
-
     var now=new Date();
     var timeStr=now.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
     el.innerHTML=
       '<button class="dash-refresh" onclick="loadDash()">&#8635; تحديث — آخر تحديث: '+timeStr+'</button>'+
       '<div class="dash-grid">'+
-        '<div class="dash-card">'+
-          '<div class="dash-num" style="color:var(--green)">'+reported.length+'</div>'+
-          '<div class="dash-lbl">سجّلت ✅</div>'+
-        '</div>'+
-        '<div class="dash-card">'+
-          '<div class="dash-num" style="color:var(--red)">'+pending.length+'</div>'+
-          '<div class="dash-lbl">لم تسجّل ❌</div>'+
-        '</div>'+
-        '<div class="dash-card">'+
-          '<div class="dash-num" style="color:var(--blue)">'+totalPresent+'</div>'+
-          '<div class="dash-lbl">حاضر اليوم</div>'+
-        '</div>'+
-        '<div class="dash-card">'+
-          '<div class="dash-num" style="color:'+barColor+'">'+attendPct+'%</div>'+
-          '<div class="dash-lbl">نسبة الحضور</div>'+
-        '</div>'+
-        (lastRec?
-          '<div class="dash-card dash-card-wide" style="text-align:right">'+
-            '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">آخر تسجيل</div>'+
-            '<div style="font-size:14px;font-weight:900">'+lastRec.station+'</div>'+
-            '<div style="font-size:12px;color:var(--muted)">'+lastRec.manager+' - '+lastRec.report_time+'</div>'+
-          '</div>':'')+
+        '<div class="dash-card"><div class="dash-num" style="color:var(--green)">'+reported.length+'</div><div class="dash-lbl">سجّلت ✅</div></div>'+
+        '<div class="dash-card"><div class="dash-num" style="color:var(--red)">'+pending.length+'</div><div class="dash-lbl">لم تسجّل ❌</div></div>'+
+        '<div class="dash-card"><div class="dash-num" style="color:var(--blue)">'+totalPresent+'</div><div class="dash-lbl">حاضر اليوم</div></div>'+
+        '<div class="dash-card"><div class="dash-num" style="color:'+barColor+'">'+attendPct+'%</div><div class="dash-lbl">نسبة الحضور</div></div>'+
+        (lastRec?'<div class="dash-card dash-card-wide" style="text-align:right">'+
+          '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">آخر تسجيل</div>'+
+          '<div style="font-size:14px;font-weight:900">'+lastRec.station+'</div>'+
+          '<div style="font-size:12px;color:var(--muted)">'+lastRec.manager+' - '+lastRec.report_time+'</div></div>':'')+
       '</div>'+
       (reported.length?'<div class="sec">المحطات اللي سجّلت ('+reported.length+')</div>'+reportedHTML:'')+
-      (pending.length?'<div class="sec">المحطات اللي لم تسجّل ('+pending.length+')</div>'+pendingHTML:''+
+      (pending.length?'<div class="sec">المحطات اللي لم تسجّل ('+pending.length+')</div>'+pendingHTML:
         (stations.length?'<div class="empty"><div class="ei">🎉</div><p>كل المحطات سجّلت الحضور اليوم!</p></div>':''));
   });
 }
 
-// ── TABS ──
 function setupTabs(){
   var tabs=[
     {btn:'tab-dash',     view:'view-dash',     fn:loadDash},
@@ -886,7 +785,6 @@ function setupTabs(){
   });
 }
 
-// ── STATIONS ──
 document.getElementById('addStBtn').addEventListener('click',addStation);
 function addStation(){
   var n=document.getElementById('inSt').value.trim();
@@ -912,7 +810,6 @@ function toggleSt(id){var el=document.getElementById('sc'+id);if(el)el.classList
 function renderSt(){
   var el=document.getElementById('stList');if(!el)return;
   if(!stations.length){el.innerHTML='<div class="empty"><div class="ei">&#127979;</div><p>لا توجد محطات بعد</p></div>';return;}
-  // جيب آخر تسجيل لكل محطة
   sbGet('attendance','select=station,report_date,report_time&order=created_at.desc&limit=200',function(recs){
     var lastMap={};
     recs.forEach(function(r){if(!lastMap[r.station])lastMap[r.station]=r.report_date+' '+r.report_time;});
@@ -929,14 +826,12 @@ function renderSt(){
           '<div class="st-tw"><div class="st-dot"></div>'+
             '<div><div class="st-name">'+s.name+'</div>'+
             '<div class="st-meta">المدير: '+s.manager+' &ndash; '+s.employees.length+' موظف</div>'+
-            lastHTML+
-            '</div></div>'+
+            lastHTML+'</div></div>'+
           '<div class="st-acts">'+
             '<button class="btn btn-red" style="padding:6px 10px;font-size:12px" onclick="event.stopPropagation();window._delStation('+s.id+')">حذف</button>'+
             '<span class="chev">&#9660;</span></div></div>'+
         '<div class="st-body">'+
-          '<div class="mgr-badge">'+
-            '<div><div style="font-size:11px;color:var(--muted);margin-bottom:2px">المدير</div>'+
+          '<div class="mgr-badge"><div><div style="font-size:11px;color:var(--muted);margin-bottom:2px">المدير</div>'+
             '<div class="mgr-nm">'+s.manager+'</div></div>'+
             '<div style="font-size:12px;color:var(--muted)">'+s.name+'</div></div>'+
           '<div style="margin-top:13px">'+
@@ -945,7 +840,7 @@ function renderSt(){
               '<button class="btn btn-ghost" style="padding:5px 11px;font-size:12px" onclick="window._openEmpOv('+s.id+',\''+s.name.replace(/'/g,"\\'")+'\')">+ موظف</button>'+
             '</div></div>'+
           '<div style="margin-top:13px">'+
-            '<div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:8px">كود المدير السري (اختياري &ndash; بدونه يدخل المدير بدون كود)</div>'+
+            '<div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:8px">كود المدير السري (اختياري)</div>'+
             '<div class="row">'+
               '<input type="text" id="code_'+s.id+'" placeholder="مثال: 1234" value="'+(s.manager_code||'').replace(/"/g,'&quot;')+'">'+
               '<button class="btn btn-blue" onclick="window._saveCode('+s.id+')">حفظ</button>'+
@@ -964,7 +859,7 @@ window._saveCode=function(sid){
   s.manager_code=val;
   saveStation(s);
   logAudit('تعديل كود المدير',s.name+' - '+(val?'تم تعيين كود':'تمت ازالة الكود'));
-  toast(val?'تم حفظ كود المدير':'تم إزالة الكود — المدير يدخل بدون كود','ok');
+  toast(val?'تم حفظ كود المدير':'تم إزالة الكود','ok');
 };
 window._delEmp=function(sid,idx){
   var s=stations.find(function(s){return s.id===sid;});
@@ -974,7 +869,6 @@ window._delEmp=function(sid,idx){
   logAudit('حذف موظف',name+' - محطة: '+s.name);
 };
 
-// ── EMPLOYEES ──
 window._openEmpOv=function(id,name){
   activeStId=id;
   document.getElementById('empOvSub').textContent='محطة: '+name;
@@ -998,7 +892,6 @@ function addEmp(){
 document.getElementById('addEmpBtn').addEventListener('click',addEmp);
 document.getElementById('empIn').addEventListener('keydown',function(e){if(e.key==='Enter')addEmp();});
 
-// ── LINKS ──
 function buildURL(s){return location.href.split('?')[0]+'?id='+s.id+'_'+todayISO;}
 function saveLinks(){
   stations.forEach(function(s){
@@ -1014,7 +907,6 @@ function renderLinks(){
   var el=document.getElementById('linksBox');if(!el)return;
   if(!stations.length){el.innerHTML='<div class="empty"><div class="ei">&#128279;</div><p>اضف محطات اولا</p></div>';return;}
   saveLinks();
-  // جيب آخر تسجيل لكل محطة
   sbGet('attendance','select=station,report_date,report_time&order=created_at.desc&limit=200',function(recs){
     var lastMap={};
     recs.forEach(function(r){if(!lastMap[r.station])lastMap[r.station]=r.report_date+' '+r.report_time;});
@@ -1022,18 +914,15 @@ function renderLinks(){
       var url=buildURL(s);
       var last=lastMap[s.name]?'&#128337; آخر تسجيل: '+lastMap[s.name]:'لم يُسجَّل بعد';
       return '<div class="lnk-card">'+
-        '<div class="lnk-top">'+
-          '<div>'+
-            '<div class="lnk-name">'+s.name+'</div>'+
-            '<div class="lnk-sub">المدير: '+s.manager+' &ndash; '+s.employees.length+' موظف</div>'+
-            '<div class="lnk-last">'+last+'</div>'+
-          '</div>'+
+        '<div class="lnk-top"><div>'+
+          '<div class="lnk-name">'+s.name+'</div>'+
+          '<div class="lnk-sub">المدير: '+s.manager+' &ndash; '+s.employees.length+' موظف</div>'+
+          '<div class="lnk-last">'+last+'</div></div>'+
           '<div class="lnk-btns">'+
             '<button class="cbtn cbtn-green" onclick="window._copyLink('+s.id+')">نسخ الرابط</button>'+
-            '<button class="cbtn cbtn-gold"  onclick="window._regenLink('+s.id+')">&#128260; اعادة انشاء الرابط</button>'+
+            '<button class="cbtn cbtn-gold"  onclick="window._regenLink('+s.id+')">&#128260; اعادة انشاء</button>'+
             '<button class="cbtn cbtn-gold"  onclick="window._resetLink('+s.id+')">&#128275; اعادة فتح</button>'+
-          '</div>'+
-        '</div>'+
+          '</div></div>'+
         '<div class="lnk-label">الرابط اليومي &ndash; '+s.name+'</div>'+
         '<div class="lnk-url" id="url_'+s.id+'" data-url="'+url+'">'+url+'</div>'+
       '</div>';
@@ -1079,7 +968,6 @@ window._resetLink=function(sid){
     });
 };
 
-// ── MANAGER UI ──
 var STATUSES=[
   {key:'حاضر',  cls:'sb-p',card:'s-present',note:false},
   {key:'راحة',  cls:'sb-r',card:'s-rest',   note:true},
@@ -1093,28 +981,18 @@ function showMgr(info,lockKey){
   document.getElementById('mgrTitle').textContent=info.stationName;
   document.getElementById('mgrSub').textContent='المدير: '+info.managerName;
   document.title=info.stationName+' - تسجيل الحضور';
-
-  // تحقق من كود المدير لو موجود
   if(info.managerCode){
     document.getElementById('mgrBody').innerHTML=
-      '<div class="mgr-wrap">'+
-        '<div class="ip">'+
-          '<div class="ip-station">'+info.stationName+'</div>'+
-          '<div class="ip-mgr">المدير: '+info.managerName+'</div>'+
-        '</div>'+
-        '<div style="margin-bottom:12px;font-size:14px;color:var(--muted)">ادخل الكود السري للمدير للمتابعة</div>'+
+      '<div class="mgr-wrap"><div class="ip">'+
+        '<div class="ip-station">'+info.stationName+'</div>'+
+        '<div class="ip-mgr">المدير: '+info.managerName+'</div></div>'+
+        '<div style="margin-bottom:12px;font-size:14px;color:var(--muted)">ادخل الكود السري للمتابعة</div>'+
         '<input type="password" id="mgrCodeInput" class="p-note" style="display:block;font-size:15px;padding:13px;margin-bottom:12px" placeholder="الكود السري">'+
-        '<button class="sub-btn" id="mgrCodeBtn">تحقق &#8594;</button>'+
-      '</div>';
+        '<button class="sub-btn" id="mgrCodeBtn">تحقق &#8594;</button></div>';
     document.getElementById('mgrCodeBtn').addEventListener('click',function(){
       var entered=document.getElementById('mgrCodeInput').value.trim();
-      if(entered===info.managerCode){
-        showMgrForm(info,lockKey);
-      } else {
-        toast('الكود غلط','err');
-        document.getElementById('mgrCodeInput').value='';
-        document.getElementById('mgrCodeInput').focus();
-      }
+      if(entered===info.managerCode){showMgrForm(info,lockKey);}
+      else{toast('الكود غلط','err');document.getElementById('mgrCodeInput').value='';document.getElementById('mgrCodeInput').focus();}
     });
     document.getElementById('mgrCodeInput').addEventListener('keydown',function(e){
       if(e.key==='Enter') document.getElementById('mgrCodeBtn').click();
@@ -1143,26 +1021,18 @@ function showMgrForm(info,lockKey){
     '</div>';
   }
 
-  var cardsHTML=people.map(function(name){
-    return buildCard(name,name===info.managerName);
-  }).join('');
-
   document.getElementById('mgrBody').innerHTML=
     '<div class="mgr-wrap">'+
-      '<div class="ip">'+
-        '<div class="ip-station">'+info.stationName+'</div>'+
+      '<div class="ip"><div class="ip-station">'+info.stationName+'</div>'+
         '<div class="ip-mgr">المدير: '+info.managerName+'</div>'+
-        '<div class="ip-date">'+dateStr+'</div>'+
-      '</div>'+
+        '<div class="ip-date">'+dateStr+'</div></div>'+
       '<div class="prog-bar"><div class="prog-fill" id="pf" style="width:0%"></div></div>'+
       '<div class="prog-lbl">سجلت <span id="dc">0</span> من <span id="totalCount">'+total+'</span> شخص</div>'+
-      '<div id="peopleList">'+cardsHTML+'</div>'+
+      '<div id="peopleList">'+people.map(function(name){return buildCard(name,name===info.managerName);}).join('')+'</div>'+
       '<div class="row" style="margin:4px 0 14px">'+
         '<input type="text" id="newPersonInput" placeholder="&#10133; اضافة شخص غير موجود بالقائمة">'+
-        '<button class="btn btn-blue" id="addPersonBtn">اضافة</button>'+
-      '</div>'+
-      '<button class="sub-btn" id="subBtn">&#10003; ارسال التقرير</button>'+
-    '</div>';
+        '<button class="btn btn-blue" id="addPersonBtn">اضافة</button></div>'+
+      '<button class="sub-btn" id="subBtn">&#10003; ارسال التقرير</button></div>';
 
   window._mAtt=function(name,status){
     att[name]=status;
@@ -1190,8 +1060,7 @@ function showMgrForm(info,lockKey){
     document.getElementById('peopleList').insertAdjacentHTML('beforeend',buildCard(name,false));
     document.getElementById('totalCount').textContent=total;
     document.getElementById('pf').style.width=Math.round(Object.keys(att).length/total*100)+'%';
-    input.value='';
-    input.focus();
+    input.value='';input.focus();
     var card=document.getElementById('pr_'+CSS.escape(name));
     if(card)card.scrollIntoView({behavior:'smooth',block:'center'});
   }
@@ -1206,49 +1075,30 @@ function showMgrForm(info,lockKey){
       if(el)el.scrollIntoView({behavior:'smooth',block:'center'});
       return;
     }
-
-    // شاشة المراجعة قبل الإرسال
     var pm={'حاضر':'pill-p','راحة':'pill-r','عطلة':'pill-h','مرضي':'pill-m','اجازة':'pill-v','انقطاع':'pill-a'};
     var previewHTML=people.map(function(n){
       var ne=document.getElementById('pn_'+CSS.escape(n));
       var note=(ne&&att[n]!=='حاضر')?ne.value.trim():'';
-      return '<div style="display:flex;justify-content:space-between;align-items:center;'+
-        'padding:8px 0;border-bottom:1px solid var(--border)">'+
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">'+
         '<span style="font-weight:700;font-size:13px">'+n+'</span>'+
         '<div style="display:flex;align-items:center;gap:6px">'+
           (note?'<span style="font-size:11px;color:var(--muted)">('+note+')</span>':'')+
-          '<span class="pill '+(pm[att[n]]||'pill-p')+'" style="margin:0">'+att[n]+'</span>'+
-        '</div></div>';
+          '<span class="pill '+(pm[att[n]]||'pill-p')+'" style="margin:0">'+att[n]+'</span></div></div>';
     }).join('');
-
     var cntPresent=people.filter(function(n){return att[n]==='حاضر';}).length;
-    var cntOther=people.length-cntPresent;
-
     document.getElementById('mgrBody').innerHTML=
-      '<div class="mgr-wrap">'+
-        '<div class="ip">'+
-          '<div class="ip-station">&#128203; مراجعة التقرير</div>'+
-          '<div class="ip-mgr">'+info.stationName+' — '+info.managerName+'</div>'+
-        '</div>'+
+      '<div class="mgr-wrap"><div class="ip"><div class="ip-station">&#128203; مراجعة التقرير</div>'+
+        '<div class="ip-mgr">'+info.stationName+' — '+info.managerName+'</div></div>'+
         '<div class="stats" style="margin-bottom:16px">'+
           '<div class="stat"><div class="stat-n" style="color:var(--green)">'+cntPresent+'</div><div class="stat-l">حاضر</div></div>'+
-          '<div class="stat"><div class="stat-n" style="color:var(--red)">'+cntOther+'</div><div class="stat-l">غير حاضر</div></div>'+
-          '<div class="stat"><div class="stat-n" style="color:var(--blue)">'+people.length+'</div><div class="stat-l">الإجمالي</div></div>'+
-        '</div>'+
+          '<div class="stat"><div class="stat-n" style="color:var(--red)">'+(people.length-cntPresent)+'</div><div class="stat-l">غير حاضر</div></div>'+
+          '<div class="stat"><div class="stat-n" style="color:var(--blue)">'+people.length+'</div><div class="stat-l">الإجمالي</div></div></div>'+
         '<div style="margin-bottom:16px">'+previewHTML+'</div>'+
         '<div style="display:flex;gap:10px">'+
           '<button class="sub-btn" id="confirmBtn" style="flex:2">&#10003; تأكيد الإرسال</button>'+
-          '<button class="sub-btn" id="backBtn" style="flex:1;background:var(--card);color:var(--text);'+
-            'border:1.5px solid var(--border);box-shadow:none">&#8592; تعديل</button>'+
-        '</div>'+
-      '</div>';
-
-    // زرار تعديل - يرجع لشاشة التسجيل
-    document.getElementById('backBtn').addEventListener('click',function(){
-      showMgrForm(info,lockKey);
-    });
-
-    // زرار تأكيد الإرسال
+          '<button class="sub-btn" id="backBtn" style="flex:1;background:var(--card);color:var(--text);border:1.5px solid var(--border);box-shadow:none">&#8592; تعديل</button>'+
+        '</div></div>';
+    document.getElementById('backBtn').addEventListener('click',function(){showMgrForm(info,lockKey);});
     document.getElementById('confirmBtn').addEventListener('click',function(){
       var btn=document.getElementById('confirmBtn');
       btn.disabled=true;btn.textContent='جاري الارسال...';
@@ -1282,19 +1132,10 @@ function showMgrForm(info,lockKey){
   });
 }
 
-// ── RECORDS ──
 function setupRecordsBtns(){
-  document.getElementById('searchBtn').addEventListener('click',function(){
-    document.getElementById('cmpBox').style.display='none';
-    loadByDate();
-  });
-  document.getElementById('todayBtn').addEventListener('click',function(){
-    document.getElementById('cmpBox').style.display='none';
-    loadToday();
-  });
-  document.getElementById('empSearch').addEventListener('keydown',function(e){
-    if(e.key==='Enter') document.getElementById('empSearchDayBtn').click();
-  });
+  document.getElementById('searchBtn').addEventListener('click',function(){document.getElementById('cmpBox').style.display='none';loadByDate();});
+  document.getElementById('todayBtn').addEventListener('click',function(){document.getElementById('cmpBox').style.display='none';loadToday();});
+  document.getElementById('empSearch').addEventListener('keydown',function(e){if(e.key==='Enter') document.getElementById('empSearchDayBtn').click();});
   document.getElementById('empSearchDayBtn').addEventListener('click',function(){
     searchEmp=document.getElementById('empSearch').value.trim();
     document.getElementById('empSearchResults').innerHTML='';
@@ -1305,8 +1146,6 @@ function setupRecordsBtns(){
     if(!name){toast('اكتب اسم الموظف اولا','warn');return;}
     searchEmpInMonth(name);
   });
-
-  // مقارنة يومين
   document.getElementById('cmpBtn').addEventListener('click',function(){
     var d1=document.getElementById('cmpDate1').value;
     var d2=document.getElementById('cmpDate2').value;
@@ -1314,19 +1153,14 @@ function setupRecordsBtns(){
     if(d1===d2){toast('اختار يومين مختلفين','warn');return;}
     loadCompare(d1,d2);
   });
-
-  // تصدير PDF
   document.getElementById('expPdfBtn').addEventListener('click',function(){
     if(!records.length){toast('اضغط بحث اولا','warn');return;}
     buildPDF(records,document.getElementById('dateInput').value||todayISO);
   });
-
-  // نسخ للواتساب
   document.getElementById('copyRptBtn').addEventListener('click',function(){
     if(!records.length){toast('اضغط بحث اولا','warn');return;}
     copyReport(records,document.getElementById('dateInput').value||todayISO);
   });
-
   document.getElementById('expDayBtn').addEventListener('click',function(){
     var date=document.getElementById('dateInput').value||todayISO;
     if(!records.length){toast('اضغط بحث اولا','warn');return;}
@@ -1341,16 +1175,12 @@ function setupRecordsBtns(){
       buildExcel(data,null,true);
     });
   });
-
   document.getElementById('expWekBtn').addEventListener('click',function(){
-    var now=new Date();
-    var day=now.getDay();
-    // الأسبوع من الأحد للسبت
-    var diffSun=day===0?0:day;
-    var sun=new Date(now); sun.setDate(now.getDate()-diffSun);
-    var sat=new Date(sun); sat.setDate(sun.getDate()+6);
+    var now=new Date(),day=now.getDay();
+    var sun=new Date(now);sun.setDate(now.getDate()-(day===0?0:day));
+    var sat=new Date(sun);sat.setDate(sun.getDate()+6);
     var fmt=function(d){return d.toISOString().split('T')[0];};
-    var startISO=fmt(sun), endISO=fmt(sat);
+    var startISO=fmt(sun),endISO=fmt(sat);
     toast('جاري تحميل بيانات الأسبوع...','ok');
     sbGet('attendance','report_date_iso=gte.'+startISO+'&report_date_iso=lte.'+endISO+'&order=created_at.asc&limit=1000',function(data){
       if(!data.length){toast('لا توجد بيانات هذا الأسبوع','warn');return;}
@@ -1363,15 +1193,12 @@ function setupRecordsBtns(){
     if(!confirm('حذف '+data.length+' تقرير؟ لا يمكن التراجع.'))return;
     var done=0;
     data.forEach(function(r){sbDel('attendance','id=eq.'+r.id).then(function(){done++;if(done===data.length)loadByDate();});});
-    logAudit('حذف جماعي للتقارير',data.length+' تقرير - '+(filterSt==='all'?'كل المحطات':filterSt)+' - تاريخ: '+(document.getElementById('dateInput').value||todayISO));
+    logAudit('حذف جماعي للتقارير',data.length+' تقرير');
   });
   document.getElementById('auditBtn').addEventListener('click',openAuditLog);
-  document.getElementById('closeAuditBtn').addEventListener('click',function(){
-    document.getElementById('auditOv').classList.remove('open');
-  });
+  document.getElementById('closeAuditBtn').addEventListener('click',function(){document.getElementById('auditOv').classList.remove('open');});
 }
 
-// ── SEARCH EMP IN MONTH ──
 function searchEmpInMonth(name){
   var el=document.getElementById('empSearchResults');
   el.innerHTML='<div class="loading">&#9203; جاري البحث في الشهر...</div>';
@@ -1379,199 +1206,121 @@ function searchEmpInMonth(name){
   var last=new Date(y,now.getMonth()+1,0).getDate();
   var isStation=stations.some(function(s){return s.name.indexOf(name)!==-1;});
   var monthLabel=now.toLocaleDateString('ar-EG',{month:'long',year:'numeric'});
-  sbGet('attendance',
-    'report_date_iso=gte.'+y+'-'+m+'-01&report_date_iso=lte.'+y+'-'+m+'-'+String(last).padStart(2,'0')+'&order=report_date_iso.asc&limit=2000',
-    function(data){
-      var pm={'حاضر':'pill-p','راحة':'pill-r','عطلة':'pill-h','مرضي':'pill-m','اجازة':'pill-v','انقطاع':'pill-a'};
-
-      var exportBtns='<div class="row" style="margin-bottom:12px;gap:8px">'+
-        '<button class="btn btn-green" id="srchExpExcel">&#128196; تصدير Excel</button>'+
-        '<button class="btn btn-ghost" id="srchExpPdf">&#128209; تصدير PDF</button>'+
-        '<button class="btn btn-ghost" id="srchExpWa">&#128203; نسخ للواتساب</button>'+
-      '</div>';
-
-      if(isStation){
-        var stData=data.filter(function(r){return r.station.indexOf(name)!==-1;});
-        if(!stData.length){
-          el.innerHTML='<div class="empty"><div class="ei">&#128269;</div><p>لا توجد نتائج لمحطة "'+name+'" هذا الشهر</p></div>';
-          return;
-        }
-        el.innerHTML=
-          '<div class="sec">نتائج محطة "'+name+'" — '+stData.length+' يوم — '+monthLabel+'</div>'+
-          exportBtns+
-          stData.map(function(r){
-            var pills=(r.employees||[]).map(function(e){
-              return '<div class="pill '+(pm[e.status]||'pill-p')+'">'+e.name+': '+e.status+(e.note?' ('+e.note+')':'')+' </div>';
-            }).join('');
-            return '<div class="rec-card">'+
-              '<div class="rec-head"><div>'+
-                '<div class="rec-mgr">'+r.report_date+' — '+r.report_time+'</div>'+
-                '<div class="rec-st">المدير: '+r.manager+'</div>'+
-              '</div></div>'+
-              '<div class="pills">'+pills+'</div>'+
-            '</div>';
-          }).join('');
-
-        document.getElementById('srchExpExcel').onclick=function(){buildExcel(stData,null,true);};
-        document.getElementById('srchExpPdf').onclick=function(){buildPDF(stData,name+' - '+monthLabel);};
-        document.getElementById('srchExpWa').onclick=function(){copyReport(stData,name+' - '+monthLabel);};
-
-      } else {
-        var results=[];
-        data.forEach(function(r){
-          (r.employees||[]).forEach(function(e){
-            if(e.name.indexOf(name)!==-1){
-              results.push({date:r.report_date,dateISO:r.report_date_iso,time:r.report_time,
-                station:r.station,manager:r.manager,emp:e});
-            }
-          });
-        });
-        if(!results.length){
-          el.innerHTML='<div class="empty"><div class="ei">&#128269;</div><p>لا توجد نتائج لـ "'+name+'" هذا الشهر</p></div>';
-          return;
-        }
-        var stats={};
-        results.forEach(function(r){var s=r.emp.status;stats[s]=(stats[s]||0)+1;});
-        var statsHTML=Object.keys(stats).map(function(s){
-          return '<div class="pill '+(pm[s]||'pill-p')+'">'+s+': '+stats[s]+'</div>';
+  sbGet('attendance','report_date_iso=gte.'+y+'-'+m+'-01&report_date_iso=lte.'+y+'-'+m+'-'+String(last).padStart(2,'0')+'&order=report_date_iso.asc&limit=2000',function(data){
+    var pm={'حاضر':'pill-p','راحة':'pill-r','عطلة':'pill-h','مرضي':'pill-m','اجازة':'pill-v','انقطاع':'pill-a'};
+    var exportBtns='<div class="row" style="margin-bottom:12px;gap:8px">'+
+      '<button class="btn btn-green" id="srchExpExcel">&#128196; تصدير Excel</button>'+
+      '<button class="btn btn-ghost" id="srchExpPdf">&#128209; تصدير PDF</button>'+
+      '<button class="btn btn-ghost" id="srchExpWa">&#128203; نسخ للواتساب</button></div>';
+    if(isStation){
+      var stData=data.filter(function(r){return r.station.indexOf(name)!==-1;});
+      if(!stData.length){el.innerHTML='<div class="empty"><div class="ei">&#128269;</div><p>لا توجد نتائج لمحطة "'+name+'"</p></div>';return;}
+      el.innerHTML='<div class="sec">نتائج محطة "'+name+'" — '+stData.length+' يوم</div>'+exportBtns+
+        stData.map(function(r){
+          var pills=(r.employees||[]).map(function(e){return '<div class="pill '+(pm[e.status]||'pill-p')+'">'+e.name+': '+e.status+(e.note?' ('+e.note+')':'')+' </div>';}).join('');
+          return '<div class="rec-card"><div class="rec-head"><div>'+
+            '<div class="rec-mgr">'+r.report_date+' — '+r.report_time+'</div>'+
+            '<div class="rec-st">المدير: '+r.manager+'</div></div></div>'+
+            '<div class="pills">'+pills+'</div></div>';
         }).join('');
-
-        el.innerHTML=
-          '<div class="sec">نتائج "'+name+'" — '+results.length+' يوم — '+monthLabel+'</div>'+
-          '<div class="pills" style="margin-bottom:8px">'+statsHTML+'</div>'+
-          exportBtns+
-          results.map(function(r){
-            return '<div class="rec-card">'+
-              '<div class="rec-head"><div>'+
-                '<div class="rec-mgr">'+r.date+' — '+r.time+'</div>'+
-                '<div class="rec-st">'+r.station+' — '+r.manager+'</div>'+
-              '</div>'+
-              '<div class="pill '+(pm[r.emp.status]||'pill-p')+'" style="flex-shrink:0">'+r.emp.status+'</div>'+
-              '</div>'+
-              (r.emp.note?'<div style="font-size:12px;color:var(--muted);margin-top:4px">ملاحظة: '+r.emp.note+'</div>':'')+
-            '</div>';
-          }).join('');
-
-        // تحويل نتائج الموظف لصيغة تقارير للتصدير
-        var empAsRecords=[];
-        var dayMap={};
-        results.forEach(function(r){
-          if(!dayMap[r.dateISO]){
-            dayMap[r.dateISO]={
-              id:r.dateISO,station:r.station,manager:r.manager,
-              report_date:r.date,report_date_iso:r.dateISO,
-              report_time:r.time,employees:[]
-            };
-            empAsRecords.push(dayMap[r.dateISO]);
-          }
-          dayMap[r.dateISO].employees.push(r.emp);
-        });
-
-        document.getElementById('srchExpExcel').onclick=function(){buildExcel(empAsRecords,null,true);};
-        document.getElementById('srchExpPdf').onclick=function(){buildPDF(empAsRecords,name+' - '+monthLabel);};
-        document.getElementById('srchExpWa').onclick=function(){copyReport(empAsRecords,name+' - '+monthLabel);};
-      }
+      document.getElementById('srchExpExcel').onclick=function(){buildExcel(stData,null,true);};
+      document.getElementById('srchExpPdf').onclick=function(){buildPDF(stData,name+' - '+monthLabel);};
+      document.getElementById('srchExpWa').onclick=function(){copyReport(stData,name+' - '+monthLabel);};
+    } else {
+      var results=[];
+      data.forEach(function(r){(r.employees||[]).forEach(function(e){if(e.name.indexOf(name)!==-1)results.push({date:r.report_date,dateISO:r.report_date_iso,time:r.report_time,station:r.station,manager:r.manager,emp:e});});});
+      if(!results.length){el.innerHTML='<div class="empty"><div class="ei">&#128269;</div><p>لا توجد نتائج لـ "'+name+'"</p></div>';return;}
+      var stats={};
+      results.forEach(function(r){var s=r.emp.status;stats[s]=(stats[s]||0)+1;});
+      var statsHTML=Object.keys(stats).map(function(s){return '<div class="pill '+(pm[s]||'pill-p')+'">'+s+': '+stats[s]+'</div>';}).join('');
+      el.innerHTML='<div class="sec">نتائج "'+name+'" — '+results.length+' يوم</div>'+
+        '<div class="pills" style="margin-bottom:8px">'+statsHTML+'</div>'+exportBtns+
+        results.map(function(r){
+          return '<div class="rec-card"><div class="rec-head"><div>'+
+            '<div class="rec-mgr">'+r.date+' — '+r.time+'</div>'+
+            '<div class="rec-st">'+r.station+'</div></div>'+
+            '<div class="pill '+(pm[r.emp.status]||'pill-p')+'" style="flex-shrink:0">'+r.emp.status+'</div></div>'+
+            (r.emp.note?'<div style="font-size:12px;color:var(--muted);margin-top:4px">ملاحظة: '+r.emp.note+'</div>':'')+
+          '</div>';
+        }).join('');
+      var empAsRecords=[],dayMap={};
+      results.forEach(function(r){
+        if(!dayMap[r.dateISO]){dayMap[r.dateISO]={id:r.dateISO,station:r.station,manager:r.manager,report_date:r.date,report_date_iso:r.dateISO,report_time:r.time,employees:[]};empAsRecords.push(dayMap[r.dateISO]);}
+        dayMap[r.dateISO].employees.push(r.emp);
+      });
+      document.getElementById('srchExpExcel').onclick=function(){buildExcel(empAsRecords,null,true);};
+      document.getElementById('srchExpPdf').onclick=function(){buildPDF(empAsRecords,name+' - '+monthLabel);};
+      document.getElementById('srchExpWa').onclick=function(){copyReport(empAsRecords,name+' - '+monthLabel);};
     }
-  );
+  });
 }
+
 function loadCompare(d1,d2){
   document.getElementById('cmpBox').style.display='block';
   document.getElementById('cmpBox').innerHTML='<div class="loading">&#9203; جاري تحميل المقارنة...</div>';
   var fetched={};
   function tryRender(){
     if(!fetched[d1]||!fetched[d2])return;
-    var data1=fetched[d1],data2=fetched[d2];
     var map1={},map2={};
-    data1.forEach(function(r){
-      (r.employees||[]).forEach(function(e){
-        if(!map1[r.station])map1[r.station]={};
-        map1[r.station][e.name]=e.status;
-      });
-    });
-    data2.forEach(function(r){
-      (r.employees||[]).forEach(function(e){
-        if(!map2[r.station])map2[r.station]={};
-        map2[r.station][e.name]=e.status;
-      });
-    });
+    fetched[d1].forEach(function(r){(r.employees||[]).forEach(function(e){if(!map1[r.station])map1[r.station]={};map1[r.station][e.name]=e.status;});});
+    fetched[d2].forEach(function(r){(r.employees||[]).forEach(function(e){if(!map2[r.station])map2[r.station]={};map2[r.station][e.name]=e.status;});});
     var allSt=Array.from(new Set(Object.keys(map1).concat(Object.keys(map2))));
     var html='<div class="sec">مقارنة '+d1+' مع '+d2+'</div>';
     allSt.forEach(function(st){
       var emps=new Set(Object.keys(map1[st]||{}).concat(Object.keys(map2[st]||{})));
       var rows=Array.from(emps).map(function(name){
-        var s1=(map1[st]||{})[name]||'—';
-        var s2=(map2[st]||{})[name]||'—';
-        var cls=s1===s2?'cmp-same':'cmp-diff';
+        var s1=(map1[st]||{})[name]||'—',s2=(map2[st]||{})[name]||'—';
         return '<div class="cmp-row"><span class="cmp-name">'+name+'</span>'+
-          '<span class="cmp-status '+cls+'">'+s1+' ← '+s2+'</span></div>';
+          '<span class="cmp-status '+(s1===s2?'cmp-same':'cmp-diff')+'">'+s1+' ← '+s2+'</span></div>';
       }).join('');
-      html+='<div class="stat-station" style="margin-bottom:12px">'+
-        '<div class="stat-station-hdr"><div class="stat-station-name">'+st+'</div></div>'+
-        rows+'</div>';
+      html+='<div class="stat-station" style="margin-bottom:12px"><div class="stat-station-hdr"><div class="stat-station-name">'+st+'</div></div>'+rows+'</div>';
     });
-    document.getElementById('cmpBox').innerHTML=html||'<div class="empty"><div class="ei">📊</div><p>لا توجد بيانات للمقارنة</p></div>';
+    document.getElementById('cmpBox').innerHTML=html;
   }
   sbGet('attendance','report_date_iso=eq.'+d1+'&order=created_at.desc&limit=500',function(data){fetched[d1]=data;tryRender();});
   sbGet('attendance','report_date_iso=eq.'+d2+'&order=created_at.desc&limit=500',function(data){fetched[d2]=data;tryRender();});
 }
 
-// ── PDF ──
 function buildPDF(data,dateLabel){
   if(!data||!data.length){toast('لا توجد بيانات','warn');return;}
   var now=new Date();
   var pm={'حاضر':'✅','راحة':'☕','عطلة':'🎉','مرضي':'🏥','اجازة':'🌴','انقطاع':'❌'};
   var html='<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8">'+
     '<style>body{font-family:Arial,sans-serif;padding:20px;color:#111;direction:rtl}'+
-    'h1{font-size:18px;margin-bottom:4px}'+
-    '.sub{font-size:13px;color:#666;margin-bottom:20px}'+
     'table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px}'+
     'th{background:#3b82f6;color:#fff;padding:8px 10px;text-align:right}'+
     'td{padding:7px 10px;border-bottom:1px solid #eee}'+
     'tr:nth-child(even){background:#f8faff}'+
     '.station{font-size:15px;font-weight:bold;margin:16px 0 6px;color:#3b82f6}'+
-    '.footer{font-size:11px;color:#aaa;margin-top:30px;text-align:center}'+
-    '@media print{button{display:none}}'+
-    '</style></head><body>'+
-    '<button onclick="window.print()" style="margin-bottom:16px;padding:8px 18px;background:#3b82f6;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px">🖨️ طباعة</button>'+
-    '<h1>تقرير الحضور</h1>'+
-    '<div class="sub">'+dateLabel+' — تم التصدير: '+now.toLocaleString('ar-EG')+'</div>';
-
+    '@media print{button{display:none}}</style></head><body>'+
+    '<button onclick="window.print()" style="margin-bottom:16px;padding:8px 18px;background:#3b82f6;color:#fff;border:none;border-radius:8px;cursor:pointer">🖨️ طباعة</button>'+
+    '<h1>تقرير الحضور</h1><div style="font-size:13px;color:#666;margin-bottom:20px">'+dateLabel+' — '+now.toLocaleString('ar-EG')+'</div>';
   var stMap={};
   data.forEach(function(r){
     if(!stMap[r.station])stMap[r.station]={manager:r.manager,time:r.report_time,emps:[]};
     (r.employees||[]).forEach(function(e){stMap[r.station].emps.push(e);});
   });
-
   Object.keys(stMap).forEach(function(st){
     var info=stMap[st];
-    html+='<div class="station">'+st+' — المدير: '+info.manager+' — '+info.time+'</div>'+
+    html+='<div class="station">'+st+' — المدير: '+info.manager+'</div>'+
       '<table><tr><th>الموظف</th><th>الحالة</th><th>ملاحظة</th></tr>'+
-      info.emps.map(function(e){
-        return '<tr><td>'+e.name+'</td><td>'+(pm[e.status]||'')+' '+e.status+'</td><td>'+(e.note||'—')+'</td></tr>';
-      }).join('')+'</table>';
+      info.emps.map(function(e){return '<tr><td>'+e.name+'</td><td>'+(pm[e.status]||'')+' '+e.status+'</td><td>'+(e.note||'—')+'</td></tr>';}).join('')+'</table>';
   });
-
-  html+='<div class="footer">Powered by Hisham Fadloun — نظام تسجيل الحضور</div></body></html>';
+  html+='</body></html>';
   var win=window.open('','_blank');
   if(win){win.document.write(html);win.document.close();}
   else toast('السماح بالنوافذ المنبثقة في المتصفح','warn');
 }
 
-// ── نسخ للواتساب ──
 function copyReport(data,dateLabel){
   var pm={'حاضر':'✅','راحة':'☕','عطلة':'🎉','مرضي':'🏥','اجازة':'🌴','انقطاع':'❌'};
   var txt='📋 تقرير الحضور\n'+dateLabel+'\n━━━━━━━━━━━━\n';
   var stMap={};
-  data.forEach(function(r){
-    if(!stMap[r.station])stMap[r.station]={manager:r.manager,emps:[]};
-    (r.employees||[]).forEach(function(e){stMap[r.station].emps.push(e);});
-  });
+  data.forEach(function(r){if(!stMap[r.station])stMap[r.station]={manager:r.manager,emps:[]};(r.employees||[]).forEach(function(e){stMap[r.station].emps.push(e);});});
   Object.keys(stMap).forEach(function(st){
     var info=stMap[st];
     txt+='\n🏢 '+st+'\n👤 المدير: '+info.manager+'\n';
-    info.emps.forEach(function(e){
-      txt+=(pm[e.status]||'')+'  '+e.name+': '+e.status+(e.note?' ('+e.note+')':'')+'\n';
-    });
+    info.emps.forEach(function(e){txt+=(pm[e.status]||'')+'  '+e.name+': '+e.status+(e.note?' ('+e.note+')':'')+'\n';});
     txt+='─────────────\n';
   });
   if(navigator.clipboard&&navigator.clipboard.writeText){
@@ -1584,19 +1333,19 @@ function openAuditLog(){
   var el=document.getElementById('auditRows');
   el.innerHTML='<div class="loading">&#9203; جاري التحميل...</div>';
   sbGet('audit_log','select=*&order=created_at.desc&limit=50',function(rows){
-    if(!rows||!rows.length){el.innerHTML='<div class="empty"><div class="ei">&#128203;</div><p>لا توجد عمليات مسجلة بعد</p></div>';return;}
+    if(!rows||!rows.length){el.innerHTML='<div class="empty"><div class="ei">&#128203;</div><p>لا توجد عمليات مسجلة</p></div>';return;}
     el.innerHTML=rows.map(function(r){
       var dt=new Date(r.created_at).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'});
       return '<div class="edit-row" style="flex-direction:column;align-items:stretch;gap:4px">'+
         '<div style="display:flex;justify-content:space-between;gap:8px">'+
           '<span class="edit-name">'+(r.username||'?')+' &ndash; '+r.action+'</span>'+
-          '<span style="font-size:11px;color:var(--muted);white-space:nowrap">'+dt+'</span>'+
-        '</div>'+
+          '<span style="font-size:11px;color:var(--muted);white-space:nowrap">'+dt+'</span></div>'+
         (r.details?'<div style="font-size:12px;color:var(--muted)">'+r.details+'</div>':'')+
       '</div>';
     }).join('');
   });
 }
+
 function loadToday(){document.getElementById('dateInput').value=todayISO;loadByDate();}
 function loadByDate(){
   var date=document.getElementById('dateInput').value||todayISO;
@@ -1608,141 +1357,84 @@ function loadByDate(){
     renderRecs();
   });
 }
+
 function renderRecs(){
   var stSet=new Set(records.map(function(r){return r.station;}));
   var empSet=new Set(records.reduce(function(a,r){return a.concat((r.employees||[]).map(function(e){return e.name;}));},[]));
   document.getElementById('sN').textContent=records.length;
   document.getElementById('sT').textContent=stSet.size;
   document.getElementById('sS').textContent=empSet.size;
-
-  // إحصاء سريع للحالات
-  var cntP=0,cntR=0,cntA=0,cntM=0,cntV=0,cntH=0;
-  records.forEach(function(r){(r.employees||[]).forEach(function(e){
-    if(e.status==='حاضر')cntP++;
-    else if(e.status==='راحة')cntR++;
-    else if(e.status==='انقطاع')cntA++;
-    else if(e.status==='مرضي')cntM++;
-    else if(e.status==='اجازة')cntV++;
-    else if(e.status==='عطلة')cntH++;
-  });});
+  var cntP=0,cntR=0,cntA=0;
+  records.forEach(function(r){(r.employees||[]).forEach(function(e){if(e.status==='حاضر')cntP++;else if(e.status==='راحة')cntR++;else if(e.status==='انقطاع')cntA++;});});
   var ss=document.getElementById('statusStats');
-  if(ss&&(cntP||cntR||cntA||cntM||cntV||cntH)){
-    ss.style.display='grid';
-    document.getElementById('ssP').textContent=cntP;
-    document.getElementById('ssR').textContent=cntR;
-    document.getElementById('ssA').textContent=cntA;
-  }
-
-  // تحديث chips الحالة
+  if(ss&&(cntP||cntR||cntA)){ss.style.display='grid';document.getElementById('ssP').textContent=cntP;document.getElementById('ssR').textContent=cntR;document.getElementById('ssA').textContent=cntA;}
   var statusChips=document.getElementById('statusChips');
-  if(statusChips){
-    statusChips.querySelectorAll('.chip').forEach(function(c){
-      c.classList.toggle('on',c.getAttribute('onclick')==="window._setStatus('"+filterStatus+"')"||
-        (filterStatus==='all'&&c.getAttribute('onclick')==="window._setStatus('all')"));
-    });
-  }
-
+  if(statusChips){statusChips.querySelectorAll('.chip').forEach(function(c){c.classList.toggle('on',c.getAttribute('onclick')==="window._setStatus('"+filterStatus+"')"||filterStatus==='all'&&c.getAttribute('onclick')==="window._setStatus('all')");});}
   var stArr=Array.from(stSet);
   document.getElementById('filterChips').innerHTML=
     '<button class="chip '+(filterSt==='all'?'on':'')+'" onclick="window._setF(\'all\')">الكل</button>'+
     stArr.map(function(n){return '<button class="chip '+(filterSt===n?'on':'')+'" onclick="window._setF(\''+n.replace(/'/g,"\\'")+'\')">'+n+'</button>';}).join('');
-
   var data=filterSt==='all'?records:records.filter(function(r){return r.station===filterSt;});
-
-  // فلترة بالاسم (موظف أو محطة)
   if(searchEmp){
     var isStation=stations.some(function(s){return s.name.indexOf(searchEmp)!==-1;});
-    if(isStation){
-      data=data.filter(function(r){return r.station.indexOf(searchEmp)!==-1;});
-    } else {
-      data=data.filter(function(r){
-        return (r.employees||[]).some(function(e){return e.name.indexOf(searchEmp)!==-1;});
-      });
-    }
+    if(isStation){data=data.filter(function(r){return r.station.indexOf(searchEmp)!==-1;});}
+    else{data=data.filter(function(r){return(r.employees||[]).some(function(e){return e.name.indexOf(searchEmp)!==-1;});});}
   }
-
-  // فلترة بالحالة
-  if(filterStatus!=='all'){
-    data=data.filter(function(r){
-      return (r.employees||[]).some(function(e){return e.status===filterStatus;});
-    });
-  }
-
+  if(filterStatus!=='all'){data=data.filter(function(r){return(r.employees||[]).some(function(e){return e.status===filterStatus;});});}
   var el=document.getElementById('recList');
-  if(!data.length){
-    el.innerHTML='<div class="empty"><div class="ei">&#128220;</div><p>'+
-      (searchEmp||filterStatus!=='all'?'لا توجد نتائج':'لا توجد سجلات في هذا اليوم')+'</p></div>';
-    return;
-  }
+  if(!data.length){el.innerHTML='<div class="empty"><div class="ei">&#128220;</div><p>'+(searchEmp||filterStatus!=='all'?'لا توجد نتائج':'لا توجد سجلات في هذا اليوم')+'</p></div>';return;}
   var pm={'حاضر':'pill-p','راحة':'pill-r','عطلة':'pill-h','مرضي':'pill-m','اجازة':'pill-v','انقطاع':'pill-a'};
   var dateLabel=document.getElementById('dateInput').value||todayISO;
   window._filteredData=data;
-
   var searchExportHTML=(searchEmp||filterStatus!=='all')?
     '<div class="row" style="margin-bottom:10px;gap:8px">'+
       '<button class="btn btn-green" onclick="buildExcel(window._filteredData,\''+dateLabel+'\',false)">&#128196; Excel النتائج</button>'+
       '<button class="btn btn-ghost" onclick="buildPDF(window._filteredData,\''+dateLabel+'\')">&#128209; PDF النتائج</button>'+
-      '<button class="btn btn-ghost" onclick="copyReport(window._filteredData,\''+dateLabel+'\')">&#128203; نسخ للواتساب</button>'+
-    '</div>':'';
-
+      '<button class="btn btn-ghost" onclick="copyReport(window._filteredData,\''+dateLabel+'\')">&#128203; نسخ للواتساب</button></div>':'';
   el.innerHTML=searchExportHTML+data.map(function(r){
     var emps=filterStatus!=='all'?(r.employees||[]).filter(function(e){return e.status===filterStatus||searchEmp&&e.name.indexOf(searchEmp)!==-1;}):(r.employees||[]);
     var pills=emps.map(function(e){
       var hl=searchEmp&&e.name.indexOf(searchEmp)!==-1?'outline:2px solid var(--blue);':'';
       return '<div class="pill '+(pm[e.status]||'pill-p')+'" style="'+hl+'">'+e.name+': '+e.status+(e.note?' ('+e.note+')':'')+' </div>';
     }).join('');
-    return '<div class="rec-card">'+
-      '<div class="rec-head"><div>'+
-        '<div class="rec-mgr">'+r.manager+'</div>'+
-        '<div class="rec-st">'+r.station+'</div>'+
-        '<div class="rec-dt">'+r.report_date+' &ndash; '+r.report_time+'</div>'+
-      '</div><div style="display:flex;gap:6px;flex-shrink:0">'+
+    return '<div class="rec-card"><div class="rec-head"><div>'+
+      '<div class="rec-mgr">'+r.manager+'</div>'+
+      '<div class="rec-st">'+r.station+'</div>'+
+      '<div class="rec-dt">'+r.report_date+' &ndash; '+r.report_time+'</div></div>'+
+      '<div style="display:flex;gap:6px;flex-shrink:0">'+
         '<button class="rec-del" style="background:rgba(59,130,246,.1);border-color:rgba(59,130,246,.2);color:var(--blue)" onclick="window._editRec('+r.id+')">تعديل</button>'+
-        '<button class="rec-del" onclick="window._delRec('+r.id+')">حذف</button>'+
-      '</div></div>'+
+        '<button class="rec-del" onclick="window._delRec('+r.id+')">حذف</button></div></div>'+
       '<div class="pills">'+pills+'</div></div>';
   }).join('');
 }
+
 window._setF=function(v){filterSt=v;renderRecs();};
 window._setStatus=function(v){filterStatus=v;renderRecs();};
 window._delRec=function(id){
   if(!confirm('حذف هذا التقرير؟'))return;
   var r=records.find(function(x){return x.id===id;});
   sbDel('attendance','id=eq.'+id).then(function(ok){
-    if(ok){
-      records=records.filter(function(r){return r.id!==id;});renderRecs();toast('تم الحذف','ok');
-      if(r)logAudit('حذف تقرير',r.station+' - '+r.manager+' - '+r.report_date+' '+r.report_time);
-    }
+    if(ok){records=records.filter(function(r){return r.id!==id;});renderRecs();toast('تم الحذف','ok');if(r)logAudit('حذف تقرير',r.station+' - '+r.report_date);}
     else toast('فشل الحذف','err');
   });
 };
 
-// ── EDIT RECORD ──
 var activeEditId=null;
 window._editRec=function(id){
-  var r=records.find(function(x){return x.id===id;});
-  if(!r)return;
+  var r=records.find(function(x){return x.id===id;});if(!r)return;
   activeEditId=id;
-  document.getElementById('editOvSub').textContent=r.station+' - '+r.manager+' - '+r.report_date+' '+r.report_time;
+  document.getElementById('editOvSub').textContent=r.station+' - '+r.manager+' - '+r.report_date;
   var optsHTML=STATUSES.map(function(s){return '<option value="'+s.key+'">'+s.key+'</option>';}).join('');
   document.getElementById('editRows').innerHTML=(r.employees||[]).map(function(e,i){
-    return '<div class="edit-row">'+
-      '<div class="edit-name">'+e.name+'</div>'+
-      '<select class="edit-sel" id="editSel_'+i+'">'+optsHTML+'</select>'+
-    '</div>';
+    return '<div class="edit-row"><div class="edit-name">'+e.name+'</div>'+
+      '<select class="edit-sel" id="editSel_'+i+'">'+optsHTML+'</select></div>';
   }).join('');
-  (r.employees||[]).forEach(function(e,i){
-    var sel=document.getElementById('editSel_'+i);
-    if(sel)sel.value=e.status;
-  });
+  (r.employees||[]).forEach(function(e,i){var sel=document.getElementById('editSel_'+i);if(sel)sel.value=e.status;});
   document.getElementById('editOv').classList.add('open');
 };
-document.getElementById('closeEditBtn').addEventListener('click',function(){
-  document.getElementById('editOv').classList.remove('open');
-});
+document.getElementById('closeEditBtn').addEventListener('click',function(){document.getElementById('editOv').classList.remove('open');});
 document.getElementById('saveEditBtn').addEventListener('click',function(){
-  var r=records.find(function(x){return x.id===activeEditId;});
-  if(!r)return;
+  var r=records.find(function(x){return x.id===activeEditId;});if(!r)return;
   var emps=(r.employees||[]).map(function(e,i){
     var sel=document.getElementById('editSel_'+i);
     var newStatus=sel?sel.value:e.status;
@@ -1752,40 +1444,21 @@ document.getElementById('saveEditBtn').addEventListener('click',function(){
   btn.disabled=true;btn.textContent='جاري الحفظ...';
   sbPatch('attendance','id=eq.'+activeEditId,{employees:emps}).then(function(ok){
     btn.disabled=false;btn.textContent='حفظ التعديل';
-    if(ok){
-      r.employees=emps;
-      document.getElementById('editOv').classList.remove('open');
-      renderRecs();
-      toast('تم تعديل التقرير','ok');
-      logAudit('تعديل تقرير',r.station+' - '+r.manager+' - '+r.report_date+' '+r.report_time);
-    } else toast('فشل الحفظ — تأكد من الاتصال','err');
+    if(ok){r.employees=emps;document.getElementById('editOv').classList.remove('open');renderRecs();toast('تم تعديل التقرير','ok');logAudit('تعديل تقرير',r.station);}
+    else toast('فشل الحفظ','err');
   });
 });
 
-// ── EXCEL ──
 function buildExcel(data,dateLabel,isMonth){
   if(!data||!data.length){toast('لا توجد بيانات','warn');return;}
   if(typeof XLSX==='undefined'){toast('انتظر ثم حاول مرة اخرى','warn');return;}
   var now=new Date(),y=now.getFullYear(),m=now.getMonth();
   var days=[];
-  if(isMonth){
-    var last=new Date(y,m+1,0).getDate();
-    for(var d=1;d<=last;d++){var dd=String(d).padStart(2,'0'),mm=String(m+1).padStart(2,'0');days.push({lbl:dd+'/'+mm,iso:y+'-'+mm+'-'+dd});}
-  } else {
-    var iso=dateLabel||todayISO,p=iso.split('-');days.push({lbl:p[2]+'/'+p[1],iso:iso});
-  }
+  if(isMonth){var last=new Date(y,m+1,0).getDate();for(var d=1;d<=last;d++){var dd=String(d).padStart(2,'0'),mm=String(m+1).padStart(2,'0');days.push({lbl:dd+'/'+mm,iso:y+'-'+mm+'-'+dd});}}
+  else{var iso=dateLabel||todayISO,p=iso.split('-');days.push({lbl:p[2]+'/'+p[1],iso:iso});}
   var dataMap={};
-  data.forEach(function(r){
-    if(!dataMap[r.station])dataMap[r.station]={};
-    (r.employees||[]).forEach(function(e){
-      if(!dataMap[r.station][e.name])dataMap[r.station][e.name]={};
-      dataMap[r.station][e.name][r.report_date_iso]={status:e.status||'-',note:e.note||''};
-    });
-  });
-  var sts=stations.length?stations:Array.from(new Set(data.map(function(r){return r.station;}))).map(function(name){
-    return {name:name,manager:(data.find(function(r){return r.station===name;})||{}).manager||'',
-      employees:Array.from(new Set(data.filter(function(r){return r.station===name;}).reduce(function(a,r){return a.concat((r.employees||[]).map(function(e){return e.name;}));},[])))};
-  });
+  data.forEach(function(r){if(!dataMap[r.station])dataMap[r.station]={};(r.employees||[]).forEach(function(e){if(!dataMap[r.station][e.name])dataMap[r.station][e.name]={};dataMap[r.station][e.name][r.report_date_iso]={status:e.status||'-',note:e.note||''};});});
+  var sts=stations.length?stations:Array.from(new Set(data.map(function(r){return r.station;}))).map(function(name){return {name:name,manager:(data.find(function(r){return r.station===name;})||{}).manager||'',employees:Array.from(new Set(data.filter(function(r){return r.station===name;}).redu‌ce(function(a,r){return a.concat((r.employees||[]).map(function(e){return e.name;}));},[])))};});
   var wb=XLSX.utils.book_new();
   sts.forEach(function(st){
     var sd=dataMap[st.name]||{};
@@ -1795,125 +1468,49 @@ function buildExcel(data,dateLabel,isMonth){
       var ed=sd[name]||{};
       function cnt(k){return days.filter(function(d){return(ed[d.iso]||{}).status===k;}).length;}
       var cells=days.map(function(d){var e=ed[d.iso];if(!e||!e.status||e.status==='-')return '-';return e.note?e.status+' - '+e.note:e.status;});
-      var pr=cnt('حاضر'),rs=cnt('راحة'),hl=cnt('عطلة'),sk=cnt('مرضي'),vc=cnt('اجازة'),ab=cnt('انقطاع');
-      var tt=pr+rs+hl+sk+vc+ab;
+      var pr=cnt('حاضر'),rs=cnt('راحة'),hl=cnt('عطلة'),sk=cnt('مرضي'),vc=cnt('اجازة'),ab=cnt('انقطاع'),tt=pr+rs+hl+sk+vc+ab;
       return [name].concat(cells).concat([pr,rs,hl,sk,vc,ab,tt?Math.round(pr/tt*100)+'%':'-']);
     });
     var ws=XLSX.utils.aoa_to_sheet([hdr].concat(rows));
-    ws['!cols']=[{wch:16}].concat(days.map(function(){return{wch:isMonth?13:18};})).concat([{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:11},{wch:13}]);
     XLSX.utils.book_append_sheet(wb,ws,st.name.substring(0,31));
   });
-  var sh=['الموظف','المحطة','المدير','حاضر','راحة','عطلة','مرضي','اجازة','انقطاع','نسبة الحضور'];
-  var sr=[];
-  sts.forEach(function(st){
-    var sd=dataMap[st.name]||{};
-    var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
-    pp.forEach(function(name){
-      var ed=sd[name]||{};
-      function cnt(k){return days.filter(function(d){return(ed[d.iso]||{}).status===k;}).length;}
-      var pr=cnt('حاضر'),rs=cnt('راحة'),hl=cnt('عطلة'),sk=cnt('مرضي'),vc=cnt('اجازة'),ab=cnt('انقطاع');
-      var tt=pr+rs+hl+sk+vc+ab;
-      sr.push([name,st.name,st.manager,pr,rs,hl,sk,vc,ab,tt?Math.round(pr/tt*100)+'%':'-']);
-    });
-  });
-  var ws2=XLSX.utils.aoa_to_sheet([sh].concat(sr));
-  ws2['!cols']=[{wch:16},{wch:16},{wch:16},{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:11},{wch:13}];
-  XLSX.utils.book_append_sheet(wb,ws2,'ملخص');
-  var fname=isMonth?'حضور_شهر_'+now.toLocaleDateString('ar-EG',{month:'long',year:'numeric'}).replace(' ','-')+'.xlsx':'حضور_يوم_'+(dateLabel||todayISO)+'.xlsx';
+  var fname=isMonth?'حضور_شهر.xlsx':'حضور_يوم_'+(dateLabel||todayISO)+'.xlsx';
   var wbout=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
-  var a=document.createElement('a');
-  a.href='data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,'+wbout;
-  a.download=fname;a.style.display='none';
-  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  var a=document.createElement('a');a.href='data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,'+wbout;
+  a.download=fname;a.style.display='none';document.body.appendChild(a);a.click();document.body.removeChild(a);
   toast('تم تصدير Excel','ok');
 }
 
-// ── WEEKLY EXCEL ──
 function buildExcelWeek(data,startISO,endISO){
-  if(!data||!data.length){toast('لا توجد بيانات','warn');return;}
-  if(typeof XLSX==='undefined'){toast('انتظر ثم حاول مرة اخرى','warn');return;}
-
-  // بناء أيام الأسبوع
-  var days=[];
-  var cur=new Date(startISO+'T00:00:00');
-  var end=new Date(endISO+'T00:00:00');
+  if(!data||!data.length||typeof XLSX==='undefined')return;
+  var days=[],cur=new Date(startISO+'T00:00:00'),end=new Date(endISO+'T00:00:00');
   var dayNames=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
-  while(cur<=end){
-    var iso=cur.toISOString().split('T')[0];
-    var p=iso.split('-');
-    days.push({lbl:dayNames[cur.getDay()]+' '+p[2]+'/'+p[1],iso:iso});
-    cur.setDate(cur.getDate()+1);
-  }
-
-  // بناء خريطة البيانات
+  while(cur<=end){var iso=cur.toISOString().split('T')[0],p=iso.split('-');days.push({lbl:dayNames[cur.getDay()]+' '+p[2]+'/'+p[1],iso:iso});cur.setDate(cur.getDate()+1);}
   var dataMap={};
-  data.forEach(function(r){
-    if(!dataMap[r.station])dataMap[r.station]={};
-    (r.employees||[]).forEach(function(e){
-      if(!dataMap[r.station][e.name])dataMap[r.station][e.name]={};
-      dataMap[r.station][e.name][r.report_date_iso]={status:e.status||'-',note:e.note||''};
-    });
-  });
-
-  var sts=stations.length?stations:Array.from(new Set(data.map(function(r){return r.station;}))).map(function(name){
-    return {name:name,manager:(data.find(function(r){return r.station===name;})||{}).manager||'',
-      employees:Array.from(new Set(data.filter(function(r){return r.station===name;})
-        .reduce(function(a,r){return a.concat((r.employees||[]).map(function(e){return e.name;}));},[])))};
-  });
-
+  data.forEach(function(r){if(!dataMap[r.station])dataMap[r.station]={};(r.employees||[]).forEach(function(e){if(!dataMap[r.station][e.name])dataMap[r.station][e.name]={};dataMap[r.station][e.name][r.report_date_iso]={status:e.status||'-',note:e.note||''};});});
+  var sts=stations.length?stations:Array.from(new Set(data.map(function(r){return r.station;}))).map(function(name){return {name:name,manager:'',employees:[]};});
   var wb=XLSX.utils.book_new();
-
   sts.forEach(function(st){
     var sd=dataMap[st.name]||{};
     var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
     var hdr=['الموظف'].concat(days.map(function(d){return d.lbl;})).concat(['حاضر','غياب','نسبة الحضور']);
     var rows=pp.map(function(name){
       var ed=sd[name]||{};
-      var cells=days.map(function(d){
-        var e=ed[d.iso];
-        if(!e||!e.status||e.status==='-')return '-';
-        return e.note?e.status+' - '+e.note:e.status;
-      });
+      var cells=days.map(function(d){var e=ed[d.iso];if(!e||!e.status||e.status==='-')return '-';return e.note?e.status+' - '+e.note:e.status;});
       var pr=days.filter(function(d){return(ed[d.iso]||{}).status==='حاضر';}).length;
       var worked=days.filter(function(d){return ed[d.iso]&&ed[d.iso].status&&ed[d.iso].status!=='-';}).length;
-      var ab=worked-pr;
-      var pct=worked?Math.round(pr/worked*100)+'%':'-';
-      return [name].concat(cells).concat([pr,ab,pct]);
+      return [name].concat(cells).concat([pr,worked-pr,worked?Math.round(pr/worked*100)+'%':'-']);
     });
     var ws=XLSX.utils.aoa_to_sheet([hdr].concat(rows));
-    ws['!cols']=[{wch:16}].concat(days.map(function(){return{wch:14};})).concat([{wch:9},{wch:9},{wch:13}]);
     XLSX.utils.book_append_sheet(wb,ws,st.name.substring(0,31));
   });
-
-  // شيت ملخص
-  var sh=['الموظف','المحطة','المدير','حاضر','غياب','نسبة الحضور'];
-  var sr=[];
-  sts.forEach(function(st){
-    var sd=dataMap[st.name]||{};
-    var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
-    pp.forEach(function(name){
-      var ed=sd[name]||{};
-      var pr=days.filter(function(d){return(ed[d.iso]||{}).status==='حاضر';}).length;
-      var worked=days.filter(function(d){return ed[d.iso]&&ed[d.iso].status&&ed[d.iso].status!=='-';}).length;
-      var pct=worked?Math.round(pr/worked*100)+'%':'-';
-      sr.push([name,st.name,st.manager,pr,worked-pr,pct]);
-    });
-  });
-  var ws2=XLSX.utils.aoa_to_sheet([sh].concat(sr));
-  ws2['!cols']=[{wch:16},{wch:16},{wch:16},{wch:9},{wch:9},{wch:13}];
-  XLSX.utils.book_append_sheet(wb,ws2,'ملخص الأسبوع');
-
   var p1=startISO.split('-'),p2=endISO.split('-');
-  var fname='حضور_اسبوع_'+p1[2]+'-'+p1[1]+' الى '+p2[2]+'-'+p2[1]+'.xlsx';
   var wbout=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
-  var a=document.createElement('a');
-  a.href='data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,'+wbout;
-  a.download=fname;a.style.display='none';
-  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  var a=document.createElement('a');a.href='data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,'+wbout;
+  a.download='حضور_اسبوع_'+p1[2]+'-'+p1[1]+'.xlsx';a.style.display='none';document.body.appendChild(a);a.click();document.body.removeChild(a);
   toast('تم تصدير تقرير الأسبوع','ok');
 }
 
-// ── MONTHLY STATS ──
 function loadStats(){
   var el=document.getElementById('statsBox');if(!el)return;
   var now=new Date(),y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,'0');
@@ -1921,111 +1518,38 @@ function loadStats(){
   document.getElementById('statsMonth').textContent=now.toLocaleDateString('ar-EG',{month:'long',year:'numeric'});
   el.innerHTML='<div class="loading">&#9203; جاري التحميل...</div>';
   sbGet('attendance','report_date_iso=gte.'+y+'-'+m+'-01&report_date_iso=lte.'+y+'-'+m+'-'+String(last).padStart(2,'0')+'&order=created_at.asc&limit=2000',function(data){
-    if(!data.length){
-      el.innerHTML='<div class="empty"><div class="ei">&#128200;</div><p>لا توجد بيانات لهذا الشهر بعد</p></div>';
-      document.getElementById('statsChartCard').style.display='none';
-      return;
-    }
-
+    if(!data.length){el.innerHTML='<div class="empty"><div class="ei">&#128200;</div><p>لا توجد بيانات لهذا الشهر</p></div>';document.getElementById('statsChartCard').style.display='none';return;}
     var dataMap={};
-    var dayMap={};
     data.forEach(function(r){
       if(!dataMap[r.station])dataMap[r.station]={};
-      if(!dayMap[r.report_date_iso])dayMap[r.report_date_iso]={present:0,total:0};
       (r.employees||[]).forEach(function(e){
         if(!dataMap[r.station][e.name])dataMap[r.station][e.name]={present:0,total:0};
         dataMap[r.station][e.name].total++;
-        dayMap[r.report_date_iso].total++;
-        if(e.status==='حاضر'){
-          dataMap[r.station][e.name].present++;
-          dayMap[r.report_date_iso].present++;
-        }
+        if(e.status==='حاضر')dataMap[r.station][e.name].present++;
       });
     });
-
-    var sortedDays=Object.keys(dayMap).sort();
-    var chartLabels=sortedDays.map(function(d){return d.split('-')[2];});
-    var chartData=sortedDays.map(function(d){
-      var dd=dayMap[d];
-      return dd.total?Math.round(dd.present/dd.total*100):0;
-    });
-    renderStatsChart(chartLabels,chartData);
-
-    var sts=stations.length?stations:Object.keys(dataMap).map(function(n){
-      return {name:n,manager:'',employees:Object.keys(dataMap[n]||{})};
-    });
-
-    el.innerHTML=sts.map(function(s){
-      var sd=dataMap[s.name]||{};
-      var pp=(s.employees||[]).indexOf(s.manager)!==-1?(s.employees||[]):[s.manager].concat(s.employees||[]).filter(Boolean);
-      if(!pp.length)pp=Object.keys(sd);
-      if(!pp.length)return '';
-
-      var totalPresent=0,totalAll=0;
-      var rowsHTML=pp.map(function(name){
-        var ed=sd[name]||{present:0,total:0};
-        totalPresent+=ed.present;totalAll+=ed.total;
-        var pct=ed.total?Math.round(ed.present/ed.total*100):0;
-        var color=pct>=90?'var(--green)':pct>=75?'var(--gold)':'var(--red)';
+    var sts=stations.length?stations:Object.keys(dataMap).map(function(n){return {name:n,manager:'',employees:Object.keys(dataMap[n]||{})};});
+    el.innerHTML=sts.map(function(st){
+      var sd=dataMap[st.name]||{};
+      var emps=Object.keys(sd);
+      if(!emps.length)return '';
+      var rows=emps.map(function(name){
+        var d=sd[name];var pct=d.total?Math.round(d.present/d.total*100):0;
+        var color=pct>=90?'var(--green)':pct>=70?'var(--gold)':'var(--red)';
         return '<div class="stat-emp-row">'+
-          '<div class="stat-emp-top">'+
-            '<span class="stat-emp-name">'+name+'</span>'+
-            '<span class="stat-emp-pct" style="color:'+color+'">'+pct+'% ('+ed.present+'/'+ed.total+')</span>'+
-          '</div>'+
-          '<div class="stat-bar"><div class="stat-bar-fill" style="width:'+pct+'%;background:'+color+'"></div></div>'+
-        '</div>';
+          '<div class="stat-emp-top"><span class="stat-emp-name">'+name+'</span>'+
+          '<span class="stat-emp-pct" style="color:'+color+'">'+pct+'%</span></div>'+
+          '<div class="stat-bar"><div class="stat-bar-fill" style="width:'+pct+'%;background:'+color+'"></div></div></div>';
       }).join('');
-
-      var avgPct=totalAll?Math.round(totalPresent/totalAll*100):0;
-      return '<div class="stat-station">'+
-        '<div class="stat-station-hdr">'+
-          '<div class="stat-station-name">'+s.name+'</div>'+
-          '<div class="stat-station-avg">متوسط الحضور: '+avgPct+'%</div>'+
-        '</div>'+
-        rowsHTML+
-      '</div>';
+      var avgPct=Math.round(emps.reduce(function(s,n){var d=sd[n];return s+(d.total?d.present/d.total*100:0);},0)/emps.length);
+      return '<div class="stat-station"><div class="stat-station-hdr">'+
+        '<div class="stat-station-name">'+st.name+'</div>'+
+        '<div class="stat-station-avg">متوسط '+avgPct+'%</div></div>'+rows+'</div>';
     }).join('');
   });
 }
 
-function renderStatsChart(labels,data){
-  var card=document.getElementById('statsChartCard');
-  var canvas=document.getElementById('statsChart');
-  if(!card||!canvas)return;
-  if(typeof Chart==='undefined'||!labels.length){card.style.display='none';return;}
-  card.style.display='block';
-  if(statsChartInstance){statsChartInstance.destroy();statsChartInstance=null;}
-  var muted=getComputedStyle(document.body).getPropertyValue('--muted').trim()||'#888';
-  var border=getComputedStyle(document.body).getPropertyValue('--border').trim()||'rgba(255,255,255,.07)';
-  var blue=getComputedStyle(document.body).getPropertyValue('--blue').trim()||'#3b82f6';
-  statsChartInstance=new Chart(canvas.getContext('2d'),{
-    type:'line',
-    data:{
-      labels:labels,
-      datasets:[{
-        label:'نسبة الحضور %',
-        data:data,
-        borderColor:blue,
-        backgroundColor:blue+'26',
-        fill:true,
-        tension:.3,
-        pointRadius:3,
-        pointBackgroundColor:blue
-      }]
-    },
-    options:{
-      responsive:true,
-      maintainAspectRatio:false,
-      scales:{
-        y:{min:0,max:100,ticks:{color:muted,callback:function(v){return v+'%';}},grid:{color:border}},
-        x:{ticks:{color:muted},grid:{color:border}}
-      },
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.parsed.y+'%';}}}}
-    }
-  });
-}
-
-// ── TOAST ──
-function toast(msg,type){
-  var t=document.getElementById('toast');
-  t.textContent=ms
+})();
+</script>
+</body>
+</html>
