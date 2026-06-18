@@ -679,22 +679,12 @@ function updateManagerLink(s){
 function delStationDB(id){sbDel('stations','id=eq.'+id);}
 
 // ── LOGIN ──
-function isLoggedIn(){
-  return localStorage.getItem('att_sess')==='1';
-}
+function isLoggedIn(){return true;}
 
 function _initApp(){
   applyTheme();
   document.getElementById('themeBtn').addEventListener('click', toggleTheme);
   document.getElementById('themeBtnMgr').addEventListener('click', toggleTheme);
-  document.getElementById('loginBtn').addEventListener('click',doLogin);
-  document.getElementById('lPass').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
-  document.getElementById('lUser').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('lPass').focus();});
-  document.getElementById('logoutBtn').addEventListener('click',function(){
-    localStorage.removeItem('att_sess');
-    localStorage.removeItem('att_role');
-    location.reload();
-  });
 
   // ── BOOT ──
   var _p=new URLSearchParams(location.search);
@@ -717,9 +707,12 @@ function _initApp(){
         managerCode:lnk.manager_code||''
       },shortId);
     });
-  } else if(isLoggedIn()){
+  } else {
     document.getElementById('loginWrap').style.display='none';
     document.getElementById('adminUI').style.display='block';
+    localStorage.setItem('att_sess','1');
+    localStorage.setItem('att_role','admin');
+    localStorage.setItem('att_user','hisham');
     initAdmin();
   }
 }
