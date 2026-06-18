@@ -613,15 +613,15 @@ function toggleTheme(){
   applyTheme();
 }
 
-// ── PWA: SERVICE WORKER ──
-if('serviceWorker' in navigator){
-  window.addEventListener('load', function(){
-    navigator.serviceWorker.register('./sw.js').catch(function(){});
-  });
-}
-
 var sessionTimer = null;
 function resetSessionTimer(){}
+
+// إلغاء الـ Service Worker القديم لو موجود
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.getRegistrations().then(function(regs){
+    regs.forEach(function(reg){reg.unregister();});
+  });
+}
 
 // ── SUPABASE ──
 
@@ -2027,5 +2027,4 @@ function renderStatsChart(labels,data){
 
 // ── TOAST ──
 function toast(msg,type){
-  var t=document.getElementById('toast');
-  t.textCon
+  var t=document.getElementById('to
