@@ -622,10 +622,15 @@ function doLogout(){
   location.href = location.pathname;
 }
 
-// إلغاء الـ Service Worker القديم لو موجود
+// إلغاء أي Service Worker وكاش قديم متبقي من نسخ سابقة
 if('serviceWorker' in navigator){
   navigator.serviceWorker.getRegistrations().then(function(regs){
     regs.forEach(function(reg){reg.unregister();});
+  });
+}
+if('caches' in window){
+  caches.keys().then(function(keys){
+    keys.forEach(function(k){caches.delete(k);});
   });
 }
 
@@ -2027,8 +2032,4 @@ function renderStatsChart(labels,data){
       maintainAspectRatio:false,
       scales:{
         y:{min:0,max:100,ticks:{color:muted,callback:function(v){return v+'%';}},grid:{color:border}},
-        x:{ticks:{color:muted},grid:{color:border}}
-      },
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.parsed.y+'%';}}}}
-    }
- 
+        x:{ticks:{color:muted},grid:{color:b
