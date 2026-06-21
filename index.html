@@ -688,9 +688,10 @@ function delStationDB(id){sbDel('stations','id=eq.'+id);}
 function isLoggedIn(){return true;}
 
 function _initApp(){
+  try{
   applyTheme();
-  document.getElementById('themeBtn').addEventListener('click', toggleTheme);
-  document.getElementById('themeBtnMgr').addEventListener('click', toggleTheme);
+  var tb=document.getElementById('themeBtn'); if(tb) tb.addEventListener('click', toggleTheme);
+  var tbm=document.getElementById('themeBtnMgr'); if(tbm) tbm.addEventListener('click', toggleTheme);
   var lo=document.getElementById('logoutBtn');
   if(lo) lo.addEventListener('click', doLogout);
 
@@ -724,18 +725,26 @@ function _initApp(){
     } else {
       document.getElementById('loginWrap').style.display='flex';
       document.getElementById('adminUI').style.display='none';
-      document.getElementById('loginBtn').addEventListener('click', doLogin);
-      document.getElementById('lPass').addEventListener('keydown', function(e){
+      var lb=document.getElementById('loginBtn');
+      if(lb) lb.addEventListener('click', doLogin);
+      var lp=document.getElementById('lPass');
+      if(lp) lp.addEventListener('keydown', function(e){
         if(e.key==='Enter') doLogin();
       });
-      document.getElementById('lUser').addEventListener('keydown', function(e){
+      var lu=document.getElementById('lUser');
+      if(lu) lu.addEventListener('keydown', function(e){
         if(e.key==='Enter') doLogin();
       });
     }
   }
+  }catch(err){
+    alert('خطأ في تشغيل الصفحة: '+err.message);
+    console.error(err);
+  }
 }
 
 function doLogin(){
+  try{
   var u=document.getElementById('lUser').value.trim();
   var p=document.getElementById('lPass').value;
   if(!u||!p){toast('ادخل اسم المستخدم وكلمة المرور','warn');return;}
@@ -755,6 +764,10 @@ function doLogin(){
       document.getElementById('lPass').value='';
     }
   });
+  }catch(err){
+    alert('خطأ فى تسجيل الدخول: '+err.message);
+    console.error(err);
+  }
 }
 
 var dashTimer=null;
@@ -2018,16 +2031,4 @@ function renderStatsChart(labels,data){
       },
       plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.parsed.y+'%';}}}}
     }
-  });
-}
-
-// ── TOAST ──
-function toast(msg,type){
-  var t=document.getElementById('toast');
-  t.textContent=msg;t.className='toast show '+(type||'ok');
-  setTimeout(function(){t.classList.remove('show');},2600);
-}
-
-
-</script>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></
+ 
