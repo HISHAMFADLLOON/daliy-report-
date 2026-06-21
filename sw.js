@@ -2,7 +2,7 @@
 // شبكة أولاً (Network First) للصفحة الرئيسية عشان البيانات تفضل محدّثة
 // كاش للملفات الثابتة (الأيقونات والمانيفست) لتشغيل أسرع ودعم التثبيت
 
-const CACHE_NAME = 'attendance-cache-v1';
+const CACHE_NAME = 'attendance-cache-v2'; // غيّر الرقم هنا (v3, v4...) مع كل تحديث مهم تنزله، عشان يفرض على الأجهزة تحديث فوري
 const ASSETS = [
   './',
   './index.html',
@@ -24,9 +24,15 @@ self.addEventListener('activate', function(e){
   e.waitUntil(
     caches.keys().then(function(keys){
       return Promise.all(keys.filter(function(k){return k!==CACHE_NAME;}).map(function(k){return caches.delete(k);}));
+    }).then(function(){
+      return self.clients.claim();
+    }).then(function(){
+      // إجبار كل الصفحات المفتوحة على إعادة التحميل فور تفعيل النسخة الجديدة
+      return self.clients.matchAll({type:'window'}).then(function(clients){
+        clients.forEach(function(client){ client.navigate(client.url); });
+      });
     })
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', function(e){
@@ -35,7 +41,7 @@ self.addEventListener('fetch', function(e){
   // الصفحة نفسها: شبكة أولاً، fallback للكاش لو مفيش انترنت
   if(e.request.mode === 'navigate'){
     e.respondWith(
-      fetch(e.request).then(function(res){
+      fetch(e.request, {cache:'no-store'}).then(function(res){
         var resClone = res.clone();
         caches.open(CACHE_NAME).then(function(cache){cache.put(e.request, resClone);});
         return res;
