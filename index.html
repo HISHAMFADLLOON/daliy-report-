@@ -1988,4 +1988,239 @@ function buildExcel(data,dateLabel,isMonth){
   ws2['!cols']=[{wch:16},{wch:16},{wch:16},{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:11},{wch:13}];
   XLSX.utils.book_append_sheet(wb,ws2,'ملخص');
   var fname=isMonth?'حضور_شهر_'+now.toLocaleDateString('ar-EG',{month:'long',year:'numeric'}).replace(' ','-')+'.xlsx':'حضور_يوم_'+(dateLabel||todayISO)+'.xlsx';
-  var wbout=XLSX.write
+  var wbout=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
+  var a=document.createElement('a');
+  a.href='data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,'+wbout;
+  a.download=fname;a.style.display='none';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  toast('تم تصدير Excel','ok');
+}
+
+// ── WEEKLY EXCEL ──
+function buildExcelWeek(data,startISO,endISO){
+  if(!data||!data.length){toast('لا توجد بيانات','warn');return;}
+  if(typeof XLSX==='undefined'){toast('انتظر ثم حاول مرة اخرى','warn');return;}
+
+  // بناء أيام الأسبوع
+  var days=[];
+  var cur=new Date(startISO+'T00:00:00');
+  var end=new Date(endISO+'T00:00:00');
+  var dayNames=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+  while(cur<=end){
+    var iso=cur.toISOString().split('T')[0];
+    var p=iso.split('-');
+    days.push({lbl:dayNames[cur.getDay()]+' '+p[2]+'/'+p[1],iso:iso});
+    cur.setDate(cur.getDate()+1);
+  }
+
+  // بناء خريطة البيانات
+  var dataMap={};
+  data.forEach(function(r){
+    if(!dataMap[r.station])dataMap[r.station]={};
+    (r.employees||[]).forEach(function(e){
+      if(!dataMap[r.station][e.name])dataMap[r.station][e.name]={};
+      dataMap[r.station][e.name][r.report_date_iso]={status:e.status||'-',note:e.note||''};
+    });
+  });
+
+  var sts=stations.length?stations:Array.from(new Set(data.map(function(r){return r.station;}))).map(function(name){
+    return {name:name,manager:(data.find(function(r){return r.station===name;})||{}).manager||'',
+      employees:Array.from(new Set(data.filter(function(r){return r.station===name;})
+        .reduce(function(a,r){return a.concat((r.employees||[]).map(function(e){return e.name;}));},[])))};
+  });
+
+  var wb=XLSX.utils.book_new();
+
+  sts.forEach(function(st){
+    var sd=dataMap[st.name]||{};
+    var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
+    var hdr=['الموظف'].concat(days.map(function(d){return d.lbl;})).concat(['حاضر','غياب','نسبة الحضور']);
+    var rows=pp.map(function(name){
+      var ed=sd[name]||{};
+      var cells=days.map(function(d){
+        var e=ed[d.iso];
+        if(!e||!e.status||e.status==='-')return '-';
+        return e.note?e.status+' - '+e.note:e.status;
+      });
+      var pr=days.filter(function(d){return(ed[d.iso]||{}).status==='حاضر';}).length;
+      var worked=days.filter(function(d){return ed[d.iso]&&ed[d.iso].status&&ed[d.iso].status!=='-';}).length;
+      var ab=worked-pr;
+      var pct=worked?Math.round(pr/worked*100)+'%':'-';
+      return [name].concat(cells).concat([pr,ab,pct]);
+    });
+    var ws=XLSX.utils.aoa_to_sheet([hdr].concat(rows));
+    ws['!cols']=[{wch:16}].concat(days.map(function(){return{wch:14};})).concat([{wch:9},{wch:9},{wch:13}]);
+    XLSX.utils.book_append_sheet(wb,ws,st.name.substring(0,31));
+  });
+
+  // شيت ملخص
+  var sh=['الموظف','المحطة','المدير','حاضر','غياب','نسبة الحضور'];
+  var sr=[];
+  sts.forEach(function(st){
+    var sd=dataMap[st.name]||{};
+    var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
+    pp.forEach(function(name){
+      var ed=sd[name]||{};
+      var pr=days.filter(function(d){return(ed[d.iso]||{}).status==='حاضر';}).length;
+      var worked=days.filter(function(d){return ed[d.iso]&&ed[d.iso].status&&ed[d.iso].status!=='-';}).length;
+      var pct=worked?Math.round(pr/worked*100)+'%':'-';
+      sr.push([name,st.name,st.manager,pr,worked-pr,pct]);
+    });
+  });
+  var ws2=XLSX.utils.aoa_to_sheet([sh].concat(sr));
+  ws2['!cols']=[{wch:16},{wch:16},{wch:16},{wch:9},{wch:9},{wch:13}];
+  XLSX.utils.book_append_sheet(wb,ws2,'ملخص الأسبوع');
+
+  var p1=startISO.split('-'),p2=endISO.split('-');
+  var fname='حضور_اسبوع_'+p1[2]+'-'+p1[1]+' الى '+p2[2]+'-'+p2[1]+'.xlsx';
+  var wbout=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
+  var a=document.createElement('a');
+  a.href='data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,'+wbout;
+  a.download=fname;a.style.display='none';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  toast('تم تصدير تقرير الأسبوع','ok');
+}
+
+// ── MONTHLY STATS ──
+function loadStats(){
+  var el=document.getElementById('statsBox');if(!el)return;
+  var now=new Date(),y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,'0');
+  var last=new Date(y,now.getMonth()+1,0).getDate();
+  document.getElementById('statsMonth').textContent=now.toLocaleDateString('ar-EG',{month:'long',year:'numeric'});
+  el.innerHTML='<div class="loading">&#9203; جاري التحميل...</div>';
+  sbGet('attendance','report_date_iso=gte.'+y+'-'+m+'-01&report_date_iso=lte.'+y+'-'+m+'-'+String(last).padStart(2,'0')+'&order=created_at.asc&limit=2000',function(data){
+    if(!data.length){
+      el.innerHTML='<div class="empty"><div class="ei">&#128200;</div><p>لا توجد بيانات لهذا الشهر بعد</p></div>';
+      document.getElementById('statsChartCard').style.display='none';
+      return;
+    }
+
+    var dataMap={};
+    var dayMap={};
+    data.forEach(function(r){
+      if(!dataMap[r.station])dataMap[r.station]={};
+      if(!dayMap[r.report_date_iso])dayMap[r.report_date_iso]={present:0,total:0};
+      (r.employees||[]).forEach(function(e){
+        if(!dataMap[r.station][e.name])dataMap[r.station][e.name]={present:0,total:0};
+        dataMap[r.station][e.name].total++;
+        dayMap[r.report_date_iso].total++;
+        if(e.status==='حاضر'){
+          dataMap[r.station][e.name].present++;
+          dayMap[r.report_date_iso].present++;
+        }
+      });
+    });
+
+    var sortedDays=Object.keys(dayMap).sort();
+    var chartLabels=sortedDays.map(function(d){return d.split('-')[2];});
+    var chartData=sortedDays.map(function(d){
+      var dd=dayMap[d];
+      return dd.total?Math.round(dd.present/dd.total*100):0;
+    });
+    renderStatsChart(chartLabels,chartData);
+
+    var sts=stations.length?stations:Object.keys(dataMap).map(function(n){
+      return {name:n,manager:'',employees:Object.keys(dataMap[n]||{})};
+    });
+
+    el.innerHTML=sts.map(function(s){
+      var sd=dataMap[s.name]||{};
+      var pp=(s.employees||[]).indexOf(s.manager)!==-1?(s.employees||[]):[s.manager].concat(s.employees||[]).filter(Boolean);
+      if(!pp.length)pp=Object.keys(sd);
+      if(!pp.length)return '';
+
+      var totalPresent=0,totalAll=0;
+      var rowsHTML=pp.map(function(name){
+        var ed=sd[name]||{present:0,total:0};
+        totalPresent+=ed.present;totalAll+=ed.total;
+        var pct=ed.total?Math.round(ed.present/ed.total*100):0;
+        var color=pct>=90?'var(--green)':pct>=75?'var(--gold)':'var(--red)';
+        return '<div class="stat-emp-row">'+
+          '<div class="stat-emp-top">'+
+            '<span class="stat-emp-name">'+name+'</span>'+
+            '<span class="stat-emp-pct" style="color:'+color+'">'+pct+'% ('+ed.present+'/'+ed.total+')</span>'+
+          '</div>'+
+          '<div class="stat-bar"><div class="stat-bar-fill" style="width:'+pct+'%;background:'+color+'"></div></div>'+
+        '</div>';
+      }).join('');
+
+      var avgPct=totalAll?Math.round(totalPresent/totalAll*100):0;
+      return '<div class="stat-station">'+
+        '<div class="stat-station-hdr">'+
+          '<div class="stat-station-name">'+s.name+'</div>'+
+          '<div class="stat-station-avg">متوسط الحضور: '+avgPct+'%</div>'+
+        '</div>'+
+        rowsHTML+
+      '</div>';
+    }).join('');
+  });
+}
+
+function renderStatsChart(labels,data){
+  var card=document.getElementById('statsChartCard');
+  var canvas=document.getElementById('statsChart');
+  if(!card||!canvas)return;
+  if(typeof Chart==='undefined'||!labels.length){card.style.display='none';return;}
+  card.style.display='block';
+  if(statsChartInstance){statsChartInstance.destroy();statsChartInstance=null;}
+  var muted=getComputedStyle(document.body).getPropertyValue('--muted').trim()||'#888';
+  var border=getComputedStyle(document.body).getPropertyValue('--border').trim()||'rgba(255,255,255,.07)';
+  var blue=getComputedStyle(document.body).getPropertyValue('--blue').trim()||'#3b82f6';
+  statsChartInstance=new Chart(canvas.getContext('2d'),{
+    type:'line',
+    data:{
+      labels:labels,
+      datasets:[{
+        label:'نسبة الحضور %',
+        data:data,
+        borderColor:blue,
+        backgroundColor:blue+'26',
+        fill:true,
+        tension:.3,
+        pointRadius:3,
+        pointBackgroundColor:blue
+      }]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      scales:{
+        y:{min:0,max:100,ticks:{color:muted,callback:function(v){return v+'%';}},grid:{color:border}},
+        x:{ticks:{color:muted},grid:{color:border}}
+      },
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.parsed.y+'%';}}}}
+    }
+  });
+}
+
+// ── TOAST ──
+function toast(msg,type){
+  var t=document.getElementById('toast');
+  t.textContent=msg;t.className='toast show '+(type||'ok');
+  setTimeout(function(){t.classList.remove('show');},2600);
+}
+
+// ── CONFIRM MODAL (replaces native confirm()) ──
+var _confirmCb=null;
+function confirmModal(title,msg,onConfirm){
+  document.getElementById('confirmTitle').textContent=title||'تأكيد الحذف';
+  document.getElementById('confirmMsg').textContent=msg||'';
+  _confirmCb=onConfirm;
+  document.getElementById('confirmOv').classList.add('open');
+}
+document.getElementById('confirmCancelBtn').addEventListener('click',function(){
+  document.getElementById('confirmOv').classList.remove('open');
+  _confirmCb=null;
+});
+document.getElementById('confirmOkBtn').addEventListener('click',function(){
+  document.getElementById('confirmOv').classList.remove('open');
+  var cb=_confirmCb;_confirmCb=null;
+  if(cb)cb();
+});
+
+</script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script>_initApp();</script>
+</body>
+</html>
