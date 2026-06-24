@@ -892,7 +892,7 @@ function initAdmin(){
 
 function checkConn(){
   var dot=document.getElementById('connDot');if(!dot)return;
-  fetch(SB_URL+'/rest/v1/?select=1',{headers:SBH})
+  fetch(SB_URL+'/rest/v1/stations?select=id&limit=1',{headers:SBH})
     .then(function(r){
       dot.className='conn-dot '+(r.ok?'ok':'err');
       dot.title=r.ok?'متصل بقاعدة البيانات':'مشكلة في الاتصال بقاعدة البيانات';
