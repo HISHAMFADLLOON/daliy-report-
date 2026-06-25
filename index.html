@@ -539,6 +539,9 @@ input[type=date]:focus{border-color:var(--blue);}
       <button class="btn btn-ghost" style="grid-column:1/-1" id="auditBtn">&#128203; سجل التدقيق</button>
       <button class="btn btn-red btn-del" id="delAllBtn">&#128465; حذف السجلات المعروضة</button>
     </div>
+    <button class="btn btn-ghost" id="fullBackupBtn" style="width:100%;margin-bottom:14px;border-color:rgba(59,130,246,.25)">
+      &#128190; نسخة احتياطية شاملة (كل البيانات)
+    </button>
     <!-- منطقة المقارنة -->
     <div id="cmpBox" style="display:none"></div>
     <div id="recList"></div>
@@ -1469,6 +1472,7 @@ function showMgrForm(info,lockKey){
 
 // ── RECORDS ──
 function setupRecordsBtns(){
+  document.getElementById('fullBackupBtn').addEventListener('click',fullBackup);
   document.getElementById('searchBtn').addEventListener('click',function(){
     document.getElementById('cmpBox').style.display='none';
     loadByDate();
@@ -2105,6 +2109,88 @@ function buildExcelWeek(data,startISO,endISO){
 }
 
 // ── MONTHLY STATS ──
+// ── FULL BACKUP (كل البيانات: attendance + stations + manager_links) ──
+function fullBackup(){
+  var btn=document.getElementById('fullBackupBtn');
+  if(btn){btn.disabled=true;btn.innerHTML='&#9203; جاري تجميع البيانات...';}
+  sbGet('attendance','select=*&order=report_date_iso.asc&limit=100000',function(attendanceAll){
+    sbGet('stations','select=*',function(stationsAll){
+      sbGet('manager_links','select=*',function(linksAll){
+        buildFullBackupFiles(attendanceAll||[],stationsAll||[],linksAll||[]);
+        if(btn){btn.disabled=false;btn.innerHTML='&#128190; نسخة احتياطية شاملة (كل البيانات)';}
+      });
+    });
+  });
+}
+function buildFullBackupFiles(attendanceAll,stationsAll,linksAll){
+  if(typeof XLSX==='undefined'){toast('انتظر تحميل المكتبة ثم حاول مرة اخرى','warn');return;}
+  var now=new Date();
+  var stamp=now.toISOString().split('T')[0]+'_'+String(now.getHours()).padStart(2,'0')+String(now.getMinutes()).padStart(2,'0');
+
+  // 1) ملف JSON خام (نسخة دقيقة 100% للاستعادة لاحقاً عند الحاجة)
+  var jsonBlob={
+    exported_at:now.toISOString(),
+    attendance:attendanceAll,
+    stations:stationsAll,
+    manager_links:linksAll
+  };
+  var jsonStr=JSON.stringify(jsonBlob,null,2);
+  var jsonA=document.createElement('a');
+  jsonA.href='data:application/json;charset=utf-8,'+encodeURIComponent(jsonStr);
+  jsonA.download='نسخة_احتياطية_كاملة_'+stamp+'.json';
+  jsonA.style.display='none';
+  document.body.appendChild(jsonA);jsonA.click();document.body.removeChild(jsonA);
+
+  // 2) ملف Excel قابل للقراءة البشرية (3 sheets)
+  var wb=XLSX.utils.book_new();
+
+  // sheet السجلات: نفرد كل موظف في صف لتسهيل الفلترة والمراجعة
+  var attRows=[['التاريخ','الوقت','المحطة','المدير','الموظف','الحالة','ملاحظة']];
+  attendanceAll.forEach(function(r){
+    (r.employees||[]).forEach(function(e){
+      attRows.push([r.report_date||r.report_date_iso,r.report_time||'',r.station||'',r.manager||'',e.name||'',e.status||'',e.note||'']);
+    });
+  });
+  var ws1=XLSX.utils.aoa_to_sheet(attRows);
+  ws1['!cols']=[{wch:12},{wch:9},{wch:18},{wch:16},{wch:16},{wch:9},{wch:20}];
+  XLSX.utils.book_append_sheet(wb,ws1,'كل السجلات');
+
+  // sheet المحطات
+  var stRows=[['اسم المحطة','المدير','عدد الموظفين','كود المدير']];
+  stationsAll.forEach(function(s){
+    stRows.push([s.name||'',s.manager||'',(s.employees||[]).length,s.manager_code||'']);
+  });
+  var ws2=XLSX.utils.aoa_to_sheet(stRows);
+  ws2['!cols']=[{wch:18},{wch:16},{wch:13},{wch:13}];
+  XLSX.utils.book_append_sheet(wb,ws2,'المحطات');
+
+  // sheet ملخص عام
+  var totalReports=attendanceAll.length;
+  var totalEmpRecords=attendanceAll.reduce(function(a,r){return a+(r.employees||[]).length;},0);
+  var dates=attendanceAll.map(function(r){return r.report_date_iso;}).filter(Boolean).sort();
+  var sumRows=[
+    ['تاريخ التصدير',now.toLocaleString('ar-EG')],
+    ['عدد التقارير الكلي',totalReports],
+    ['عدد سجلات الموظفين الكلي',totalEmpRecords],
+    ['عدد المحطات',stationsAll.length],
+    ['أقدم تقرير',dates[0]||'-'],
+    ['أحدث تقرير',dates[dates.length-1]||'-']
+  ];
+  var ws3=XLSX.utils.aoa_to_sheet(sumRows);
+  ws3['!cols']=[{wch:22},{wch:22}];
+  XLSX.utils.book_append_sheet(wb,ws3,'ملخص');
+
+  var wbout=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
+  var a=document.createElement('a');
+  a.href='data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,'+wbout;
+  a.download='نسخة_احتياطية_كاملة_'+stamp+'.xlsx';
+  a.style.display='none';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+
+  toast('تم تصدير نسختين: JSON و Excel','ok');
+  logAudit('نسخة احتياطية شاملة',totalReports+' تقرير - '+stationsAll.length+' محطة');
+}
+
 function loadStats(){
   var el=document.getElementById('statsBox');if(!el)return;
   var now=new Date(),y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,'0');
