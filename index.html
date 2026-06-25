@@ -254,6 +254,31 @@ input[type=date]:focus{border-color:var(--blue);}
 .pills{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px;}
 .pill{padding:4px 10px;border-radius:20px;font-size:12px;font-weight:700;}
 .pill-p{background:rgba(16,185,129,.1);color:var(--green);border:1px solid rgba(16,185,129,.2);}
+
+/* SELECT (مطابق لتنسيق input) */
+select.sel{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;
+  padding:11px 13px;color:var(--text);font-family:'Cairo',sans-serif;
+  font-size:14px;outline:none;transition:border .2s;appearance:none;
+  background-image:url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235b6b85' stroke-width='2'%3e%3cpath d='M6 9l6 6 6-6'/%3e%3c/svg%3e");
+  background-repeat:no-repeat;background-position:left 12px center;background-size:16px;padding-left:34px;}
+select.sel:focus{border-color:var(--blue);}
+
+/* USER CARD */
+.user-card{background:var(--grad-card);border:1.5px solid var(--border);border-radius:16px;
+  padding:15px 16px;margin-bottom:10px;box-shadow:0 3px 10px var(--shadow);
+  display:flex;justify-content:space-between;align-items:center;gap:10px;}
+.user-info{display:flex;align-items:center;gap:11px;min-width:0;flex:1;}
+.user-avatar{width:40px;height:40px;border-radius:50%;background:var(--grad-main);
+  display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:900;
+  color:#fff;flex-shrink:0;}
+.user-name{font-size:14px;font-weight:900;}
+.user-role{font-size:11px;color:var(--muted);margin-top:1px;}
+.user-acts{display:flex;gap:6px;flex-shrink:0;}
+.uact-btn{width:34px;height:34px;border-radius:9px;border:1.5px solid var(--border);
+  background:var(--card);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:14px;transition:all .15s;flex-shrink:0;}
+.uact-btn:hover{border-color:var(--blue);}
+.uact-btn.danger:hover{border-color:var(--red);background:rgba(239,68,68,.08);}
 .pill-r{background:rgba(245,158,11,.1);color:var(--gold);border:1px solid rgba(245,158,11,.2);}
 .pill-h{background:rgba(236,72,153,.1);color:var(--pink);border:1px solid rgba(236,72,153,.2);}
 .pill-m{background:rgba(59,130,246,.1);color:var(--blue);border:1px solid rgba(59,130,246,.2);}
@@ -449,6 +474,7 @@ input[type=date]:focus{border-color:var(--blue);}
     <button class="tab"    id="tab-links">&#128279; الروابط</button>
     <button class="tab"    id="tab-records">&#128202; السجلات</button>
     <button class="tab"    id="tab-stats">&#128200; احصائيات</button>
+    <button class="tab"    id="tab-users" style="display:none">&#128100; المستخدمين</button>
   </div>
 
   <!-- DASHBOARD -->
@@ -561,6 +587,25 @@ input[type=date]:focus{border-color:var(--blue);}
       </div>
     </div>
     <div id="statsBox"><div class="loading">&#9203; جاري التحميل...</div></div>
+  </div>
+
+  <!-- USERS MANAGEMENT (admin only) -->
+  <div class="view" id="view-users">
+    <div class="sec">إضافة مستخدم جديد</div>
+    <div class="row" style="margin-bottom:8px">
+      <input type="text" id="newUserName" placeholder="اسم المستخدم" autocomplete="off">
+      <input type="text" id="newUserPass" placeholder="كلمة المرور" autocomplete="off">
+    </div>
+    <div class="row" style="margin-bottom:12px;gap:8px">
+      <select id="newUserRole" class="sel" style="flex:1;min-width:0">
+        <option value="supervisor">مشرف (supervisor)</option>
+        <option value="admin">أدمن (admin)</option>
+      </select>
+      <button class="btn btn-blue" id="addUserBtn" style="flex:0 0 auto">&#10010; إضافة</button>
+    </div>
+
+    <div class="sec">المستخدمون الحاليون</div>
+    <div id="usersList"><div class="loading">&#9203; جاري التحميل...</div></div>
   </div>
 
   <div class="footer">
@@ -883,6 +928,12 @@ function initAdmin(){
     var ab=document.getElementById('auditBtn');
     if(ab)ab.style.display='none';
   }
+  // صفحة إدارة المستخدمين تظهر فقط لحساب hisham الرئيسي
+  if(localStorage.getItem('att_user')==='hisham'){
+    var ut=document.getElementById('tab-users');
+    if(ut)ut.style.display='';
+  }
+  document.getElementById('addUserBtn').addEventListener('click',addUser);
   // تحديث تلقائي للداشبورد كل 5 دقائق لو الصفحة مفتوحة
   dashTimer=setInterval(function(){
     var dashView=document.getElementById('view-dash');
@@ -1021,7 +1072,8 @@ function setupTabs(){
     {btn:'tab-stations', view:'view-stations', fn:renderSt},
     {btn:'tab-links',    view:'view-links',    fn:renderLinks},
     {btn:'tab-records',  view:'view-records',  fn:loadRecordsTab},
-    {btn:'tab-stats',    view:'view-stats',    fn:loadStats}
+    {btn:'tab-stats',    view:'view-stats',    fn:loadStats},
+    {btn:'tab-users',    view:'view-users',    fn:loadUsers}
   ];
   tabs.forEach(function(t){
     document.getElementById(t.btn).addEventListener('click',function(){
@@ -2191,6 +2243,87 @@ function buildFullBackupFiles(attendanceAll,stationsAll,linksAll){
   logAudit('نسخة احتياطية شاملة',totalReports+' تقرير - '+stationsAll.length+' محطة');
 }
 
+// ── USERS MANAGEMENT (admin only) ──
+function loadUsers(){
+  var el=document.getElementById('usersList');
+  el.innerHTML='<div class="loading">&#9203; جاري التحميل...</div>';
+  sbGet('app_users','select=username,role&order=username.asc',function(rows){
+    renderUsers(rows||[]);
+  });
+}
+function renderUsers(users){
+  var el=document.getElementById('usersList');
+  if(!users.length){el.innerHTML='<div class="empty"><div class="ei">&#128100;</div><p>لا يوجد مستخدمون</p></div>';return;}
+  var myUser=localStorage.getItem('att_user');
+  el.innerHTML=users.map(function(u){
+    var initial=u.username.charAt(0).toUpperCase();
+    var roleLabel=u.role==='admin'?'أدمن - صلاحيات كاملة':'مشرف - بدون سجل التدقيق';
+    var isSelf=u.username===myUser;
+    return '<div class="user-card">'+
+      '<div class="user-info">'+
+        '<div class="user-avatar">'+initial+'</div>'+
+        '<div style="min-width:0">'+
+          '<div class="user-name">'+u.username+(isSelf?' <span style="color:var(--blue);font-size:11px">(أنت)</span>':'')+'</div>'+
+          '<div class="user-role">'+roleLabel+'</div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="user-acts">'+
+        '<button class="uact-btn" title="تغيير كلمة المرور" onclick="promptChangePassword(\''+u.username.replace(/'/g,"\\'")+'\')">&#128274;</button>'+
+        (isSelf?'':'<button class="uact-btn danger" title="حذف المستخدم" onclick="deleteUser(\''+u.username.replace(/'/g,"\\'")+'\')">&#128465;</button>')+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+function addUser(){
+  var u=document.getElementById('newUserName').value.trim();
+  var p=document.getElementById('newUserPass').value;
+  var r=document.getElementById('newUserRole').value;
+  if(!u||!p){toast('ادخل اسم المستخدم وكلمة المرور','warn');return;}
+  if(p.length<4){toast('كلمة المرور قصيرة جداً (4 أحرف على الأقل)','warn');return;}
+  var btn=document.getElementById('addUserBtn');
+  btn.disabled=true;btn.textContent='جاري الإضافة...';
+  // تأكد أولاً أن الاسم غير مستخدم
+  sbGet('app_users','username=eq.'+encodeURIComponent(u)+'&select=username',function(existing){
+    if(existing&&existing.length){
+      btn.disabled=false;btn.innerHTML='&#10010; إضافة';
+      toast('اسم المستخدم موجود بالفعل','err');return;
+    }
+    sbPost('app_users',{username:u,password:p,role:r}).then(function(ok){
+      btn.disabled=false;btn.innerHTML='&#10010; إضافة';
+      if(ok){
+        document.getElementById('newUserName').value='';
+        document.getElementById('newUserPass').value='';
+        toast('تم إضافة المستخدم','ok');
+        logAudit('إضافة مستخدم',u+' - '+r);
+        loadUsers();
+      } else toast('فشلت الإضافة، حاول مرة اخرى','err');
+    });
+  });
+}
+window.promptChangePassword=function(username){
+  confirmModal(
+    'تغيير كلمة المرور',
+    'كلمة مرور جديدة لـ <b>'+username+'</b>:',
+    function(){
+      var np=document.getElementById('newPassInput').value;
+      if(!np||np.length<4){toast('كلمة المرور قصيرة جداً (4 أحرف على الأقل)','warn');return;}
+      sbPatch('app_users','username=eq.'+encodeURIComponent(username),{password:np}).then(function(ok){
+        if(ok){toast('تم تغيير كلمة المرور','ok');logAudit('تغيير كلمة مرور',username);}
+        else toast('فشل التغيير','err');
+      });
+    },
+    {okLabel:'حفظ',extraHtml:'<input type="text" id="newPassInput" class="login-input" style="margin-top:10px;text-align:center" placeholder="كلمة المرور الجديدة" autocomplete="off">'}
+  );
+};
+window.deleteUser=function(username){
+  confirmModal('حذف المستخدم','حذف "'+username+'" نهائياً؟ لن يستطيع تسجيل الدخول بعد ذلك.',function(){
+    sbDel('app_users','username=eq.'+encodeURIComponent(username)).then(function(ok){
+      if(ok){toast('تم حذف المستخدم','ok');logAudit('حذف مستخدم',username);loadUsers();}
+      else toast('فشل الحذف','err');
+    });
+  });
+};
+
 function loadStats(){
   var el=document.getElementById('statsBox');if(!el)return;
   var now=new Date(),y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,'0');
@@ -2311,9 +2444,15 @@ function toast(msg,type){
 
 // ── CONFIRM MODAL (replaces native confirm()) ──
 var _confirmCb=null;
-function confirmModal(title,msg,onConfirm){
+function confirmModal(title,msg,onConfirm,opts){
+  opts=opts||{};
   document.getElementById('confirmTitle').textContent=title||'تأكيد الحذف';
-  document.getElementById('confirmMsg').textContent=msg||'';
+  if(opts.extraHtml){
+    document.getElementById('confirmMsg').innerHTML=(msg?msg+'<br>':'')+opts.extraHtml;
+  } else {
+    document.getElementById('confirmMsg').textContent=msg||'';
+  }
+  document.getElementById('confirmOkBtn').textContent=opts.okLabel||'تأكيد الحذف';
   _confirmCb=onConfirm;
   document.getElementById('confirmOv').classList.add('open');
 }
