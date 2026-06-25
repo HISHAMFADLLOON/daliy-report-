@@ -1412,6 +1412,9 @@ function showMgrForm(info,lockKey){
 
     // زرار تأكيد الإرسال
     document.getElementById('confirmBtn').addEventListener('click',function(){
+      sendReport();
+    });
+    function sendReport(){
       var btn=document.getElementById('confirmBtn');
       btn.disabled=true;btn.textContent='جاري الارسال...';
       var now=new Date();
@@ -1426,6 +1429,22 @@ function showMgrForm(info,lockKey){
         report_date:date,report_date_iso:now.toISOString().split('T')[0],
         report_time:time,employees:emps
       }).then(function(ok){
+        if(!ok){
+          // الحفظ فشل: لا نقفل الرابط ولا نعرض نجاح، ونعطي فرصة إعادة المحاولة
+          btn.disabled=false;btn.textContent='✓ تأكيد الإرسال';
+          var backBtn=document.getElementById('backBtn');
+          var warnEl=document.getElementById('sendWarn');
+          if(!warnEl){
+            warnEl=document.createElement('div');
+            warnEl.id='sendWarn';
+            warnEl.style.cssText='background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);'+
+              'color:var(--red);border-radius:11px;padding:12px 14px;margin-bottom:12px;font-size:13px;font-weight:700;text-align:center';
+            btn.parentNode.parentNode.insertBefore(warnEl,btn.parentNode);
+          }
+          warnEl.textContent='⚠️ فشل حفظ التقرير، تحقق من الاتصال بالانترنت وحاول تاني';
+          return;
+        }
+        // الحفظ نجح فعلياً: نقفل الرابط الآن فقط
         var groups={};STATUSES.forEach(function(s){groups[s.key]=[];});
         emps.forEach(function(e){var lbl=e.note?e.name+'('+e.note+')':e.name;if(groups[e.status])groups[e.status].push(lbl);});
         var msg='تقرير حضور\n'+info.stationName+' - '+info.managerName+'\n'+date+' - '+time+'\n---\n';
@@ -1438,9 +1457,13 @@ function showMgrForm(info,lockKey){
         document.getElementById('mgrBody').innerHTML=
           '<div class="cs"><div class="cs-icon">&#10003;</div>'+
           '<div class="cs-title">تم ارسال التقرير</div>'+
-          '<div class="cs-sub">'+info.stationName+'<br>'+(ok?'تم الحفظ بنجاح':'تحقق من الاتصال')+'<br>هذا الرابط مقفول اليوم</div></div>';
+          '<div class="cs-sub">'+info.stationName+'<br>تم الحفظ بنجاح<br>هذا الرابط مقفول اليوم</div></div>';
+      }).catch(function(){
+        // فشل الشبكة بالكامل (مثلاً مفيش انترنت خالص)
+        btn.disabled=false;btn.textContent='✓ تأكيد الإرسال';
+        toast('لا يوجد اتصال بالانترنت، حاول تاني','err');
       });
-    });
+    }
   });
 }
 
