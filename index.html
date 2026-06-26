@@ -273,6 +273,12 @@ select.sel:focus{border-color:var(--blue);}
   color:#fff;flex-shrink:0;}
 .user-name{font-size:14px;font-weight:900;}
 .user-role{font-size:11px;color:var(--muted);margin-top:1px;}
+.user-pass-row{display:flex;align-items:center;gap:6px;margin-top:5px;}
+.user-pass-dots,.user-pass-real{font-size:12px;color:var(--muted);font-family:monospace;letter-spacing:1px;}
+.user-pass-real{color:var(--gold);font-weight:700;}
+.pass-eye-btn{background:none;border:none;cursor:pointer;font-size:13px;padding:2px;
+  opacity:.65;transition:opacity .15s;line-height:1;}
+.pass-eye-btn:hover{opacity:1;}
 .user-acts{display:flex;gap:6px;flex-shrink:0;}
 .uact-btn{width:34px;height:34px;border-radius:9px;border:1.5px solid var(--border);
   background:var(--card);cursor:pointer;display:flex;align-items:center;justify-content:center;
@@ -426,6 +432,26 @@ select.sel:focus{border-color:var(--blue);}
 .empty .ei{font-size:44px;margin-bottom:10px;}
 .loading{text-align:center;padding:32px;color:var(--muted);font-size:14px;}
 
+/* DIAGNOSTICS */
+.diag-summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px;}
+.diag-sum-card{background:var(--grad-card);border:1.5px solid var(--border);border-radius:14px;
+  padding:14px 8px;text-align:center;box-shadow:0 3px 10px var(--shadow);}
+.diag-sum-n{font-size:24px;font-weight:900;line-height:1;}
+.diag-sum-l{font-size:11px;color:var(--muted);margin-top:4px;font-weight:600;}
+.diag-item{border-radius:14px;padding:14px 16px;margin-bottom:10px;border:1.5px solid var(--border);
+  background:var(--grad-card);box-shadow:0 2px 8px var(--shadow);}
+.diag-item.sev-crit{border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.06);}
+.diag-item.sev-warn{border-color:rgba(245,158,11,.3);background:rgba(245,158,11,.06);}
+.diag-item.sev-info{border-color:rgba(59,130,246,.25);background:rgba(59,130,246,.05);}
+.diag-item.sev-ok{border-color:rgba(16,185,129,.3);background:rgba(16,185,129,.06);}
+.diag-head{display:flex;align-items:flex-start;gap:10px;}
+.diag-ic{font-size:18px;flex-shrink:0;margin-top:1px;}
+.diag-title{font-size:14px;font-weight:900;}
+.diag-desc{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.6;}
+.diag-fix-btn{margin-top:10px;padding:8px 14px;border-radius:9px;font-size:12px;font-weight:700;
+  border:none;cursor:pointer;background:var(--grad-main);color:#fff;}
+.diag-fix-btn:active{opacity:.85;}
+
 /* SKELETON LOADING */
 @keyframes skeleton-pulse{0%,100%{opacity:.55}50%{opacity:1}}
 .sk{background:var(--card);border-radius:8px;animation:skeleton-pulse 1.3s ease-in-out infinite;}
@@ -475,6 +501,7 @@ select.sel:focus{border-color:var(--blue);}
     <button class="tab"    id="tab-records">&#128202; السجلات</button>
     <button class="tab"    id="tab-stats">&#128200; احصائيات</button>
     <button class="tab"    id="tab-users" style="display:none">&#128100; المستخدمين</button>
+    <button class="tab"    id="tab-diag" style="display:none">&#129513; التشخيص</button>
   </div>
 
   <!-- DASHBOARD -->
@@ -606,6 +633,17 @@ select.sel:focus{border-color:var(--blue);}
 
     <div class="sec">المستخدمون الحاليون</div>
     <div id="usersList"><div class="loading">&#9203; جاري التحميل...</div></div>
+  </div>
+
+  <!-- SELF DIAGNOSTICS (hisham only) -->
+  <div class="view" id="view-diag">
+    <button class="btn btn-blue btn-full" id="runDiagBtn" style="margin-bottom:16px">
+      &#129513; فحص النظام الآن
+    </button>
+    <div id="diagSummary"></div>
+    <div id="diagBox">
+      <div class="empty"><div class="ei">&#129513;</div><p>دوس "فحص النظام الآن" لبدء التشخيص</p></div>
+    </div>
   </div>
 
   <div class="footer">
@@ -944,12 +982,16 @@ function initAdmin(){
     var ab=document.getElementById('auditBtn');
     if(ab)ab.style.display='none';
   }
-  // صفحة إدارة المستخدمين تظهر فقط لحساب hisham الرئيسي
+  // صفحة إدارة المستخدمين وصفحة التشخيص الذاتي تظهران فقط لحساب hisham الرئيسي
   if(localStorage.getItem('att_user')==='hisham'){
     var ut=document.getElementById('tab-users');
     if(ut)ut.style.display='';
+    var dt=document.getElementById('tab-diag');
+    if(dt)dt.style.display='';
   }
   document.getElementById('addUserBtn').addEventListener('click',addUser);
+  var rdb=document.getElementById('runDiagBtn');
+  if(rdb)rdb.addEventListener('click',runDiagnostics);
   // تحديث تلقائي للداشبورد كل 5 دقائق لو الصفحة مفتوحة
   dashTimer=setInterval(function(){
     var dashView=document.getElementById('view-dash');
@@ -1089,7 +1131,8 @@ function setupTabs(){
     {btn:'tab-links',    view:'view-links',    fn:renderLinks},
     {btn:'tab-records',  view:'view-records',  fn:loadRecordsTab},
     {btn:'tab-stats',    view:'view-stats',    fn:loadStats},
-    {btn:'tab-users',    view:'view-users',    fn:loadUsers}
+    {btn:'tab-users',    view:'view-users',    fn:loadUsers},
+    {btn:'tab-diag',     view:'view-diag',     fn:function(){}}
   ];
   tabs.forEach(function(t){
     document.getElementById(t.btn).addEventListener('click',function(){
@@ -2437,7 +2480,7 @@ function buildFullBackupFiles(attendanceAll,stationsAll,linksAll){
 function loadUsers(){
   var el=document.getElementById('usersList');
   el.innerHTML='<div class="loading">&#9203; جاري التحميل...</div>';
-  sbGet('app_users','select=username,role&order=username.asc',function(rows){
+  sbGet('app_users','select=username,password,role&order=username.asc',function(rows){
     renderUsers(rows||[]);
   });
 }
@@ -2449,17 +2492,24 @@ function renderUsers(users){
     var initial=u.username.charAt(0).toUpperCase();
     var roleLabel=u.role==='admin'?'أدمن - صلاحيات كاملة':'مشرف - بدون سجل التدقيق';
     var isSelf=u.username===myUser;
+    var safeName=u.username.replace(/'/g,"\\'");
+    var safePass=(u.password||'').replace(/'/g,"\\'").replace(/</g,'&lt;');
     return '<div class="user-card">'+
       '<div class="user-info">'+
         '<div class="user-avatar">'+initial+'</div>'+
         '<div style="min-width:0">'+
           '<div class="user-name">'+u.username+(isSelf?' <span style="color:var(--blue);font-size:11px">(أنت)</span>':'')+'</div>'+
           '<div class="user-role">'+roleLabel+'</div>'+
+          '<div class="user-pass-row" id="prow_'+safeName+'">'+
+            '<span class="user-pass-dots" id="pdots_'+safeName+'">••••••••</span>'+
+            '<span class="user-pass-real" id="ptext_'+safeName+'" style="display:none">'+safePass+'</span>'+
+            '<button class="pass-eye-btn" onclick="toggleUserPassword(\''+safeName+'\')" id="peye_'+safeName+'" title="عرض كلمة المرور">&#128065;</button>'+
+          '</div>'+
         '</div>'+
       '</div>'+
       '<div class="user-acts">'+
-        '<button class="uact-btn" title="تغيير كلمة المرور" onclick="promptChangePassword(\''+u.username.replace(/'/g,"\\'")+'\')">&#128274;</button>'+
-        (isSelf?'':'<button class="uact-btn danger" title="حذف المستخدم" onclick="deleteUser(\''+u.username.replace(/'/g,"\\'")+'\')">&#128465;</button>')+
+        '<button class="uact-btn" title="تغيير كلمة المرور" onclick="promptChangePassword(\''+safeName+'\')">&#128274;</button>'+
+        (isSelf?'':'<button class="uact-btn danger" title="حذف المستخدم" onclick="deleteUser(\''+safeName+'\')">&#128465;</button>')+
       '</div>'+
     '</div>';
   }).join('');
@@ -2512,6 +2562,162 @@ window.deleteUser=function(username){
       else toast('فشل الحذف','err');
     });
   });
+};
+window.toggleUserPassword=function(safeName){
+  var dots=document.getElementById('pdots_'+safeName);
+  var real=document.getElementById('ptext_'+safeName);
+  var eye=document.getElementById('peye_'+safeName);
+  if(!dots||!real)return;
+  var showing=real.style.display!=='none';
+  if(showing){
+    real.style.display='none';dots.style.display='inline';
+    if(eye){eye.innerHTML='&#128065;';eye.title='عرض كلمة المرور';}
+  } else {
+    real.style.display='inline';dots.style.display='none';
+    if(eye){eye.innerHTML='&#128683;';eye.title='إخفاء كلمة المرور';}
+  }
+};
+
+// ── SELF DIAGNOSTICS (منطقي بالكامل، بدون أي AI خارجي) ──
+function runDiagnostics(){
+  var btn=document.getElementById('runDiagBtn');
+  var box=document.getElementById('diagBox');
+  var sumEl=document.getElementById('diagSummary');
+  btn.disabled=true;btn.innerHTML='&#9203; جاري الفحص...';
+  box.innerHTML='<div class="loading">&#9203; جاري فحص النظام...</div>';
+  sumEl.innerHTML='';
+
+  var issues=[];
+  function addIssue(sev,icon,title,desc,fixFn,fixLabel){
+    issues.push({sev:sev,icon:icon,title:title,desc:desc,fixFn:fixFn,fixLabel:fixLabel});
+  }
+
+  sbGet('stations','select=*',function(allStations){
+    sbGet('attendance','select=id,station&limit=5000',function(allAttendance){
+      sbGet('manager_links','select=*',function(allLinks){
+        sbGet('app_users','select=username,password,role',function(allUsers){
+
+          // 1) محطات بدون مدير
+          (allStations||[]).forEach(function(s){
+            if(!s.manager||!s.manager.trim()){
+              addIssue('crit','&#9888;&#65039;','محطة بدون مدير','محطة "'+s.name+'" مسجلة بدون اسم مدير، وده يمنع توليد رابط تسجيل صحيح لها.');
+            }
+            if(!s.employees||!s.employees.length){
+              addIssue('warn','&#128101;','محطة بدون موظفين','محطة "'+s.name+'" ليس لها أي موظفين مسجلين، فلن يظهر أحد في رابط التسجيل سوى المدير.');
+            }
+          });
+
+          // 2) مستخدمين بكلمة مرور ضعيفة
+          (allUsers||[]).forEach(function(u){
+            if(!u.password||u.password.length<4){
+              addIssue('crit','&#128274;','كلمة مرور ضعيفة جداً','المستخدم "'+u.username+'" كلمة مروره أقل من 4 أحرف، يسهل تخمينها.');
+            } else if(u.password.toLowerCase()===u.username.toLowerCase()){
+              addIssue('crit','&#128274;','كلمة مرور = اسم المستخدم','المستخدم "'+u.username+'" كلمة مروره مطابقة لاسم المستخدم، وده خطر أمان واضح.');
+            }
+          });
+
+          // 3) روابط مدير قديمة لم تُستخدم منذ فترة طويلة (أكثر من 3 أيام بدون استخدام)
+          var oldLinksCount=0;
+          (allLinks||[]).forEach(function(l){
+            if(l.created_date&&!l.used_date){
+              var created=new Date(l.created_date+'T00:00:00');
+              var diffDays=Math.floor((new Date(todayISO+'T00:00:00')-created)/86400000);
+              if(diffDays>=3)oldLinksCount++;
+            }
+          });
+          if(oldLinksCount>0){
+            addIssue('info','&#128279;','روابط لم تُستخدم منذ فترة','يوجد '+oldLinksCount+' رابط مدير تم إنشاؤه ولم يُستخدم منذ 3 أيام أو أكثر. تأكد أن المدير المعني يستلم الرابط بشكل صحيح.');
+          }
+
+          // 4) سجلات حضور تابعة لمحطات محذوفة (orphaned records)
+          var stationNames=(allStations||[]).map(function(s){return s.name;});
+          var orphanedStations={};
+          (allAttendance||[]).forEach(function(r){
+            if(r.station&&stationNames.indexOf(r.station)===-1){
+              orphanedStations[r.station]=(orphanedStations[r.station]||0)+1;
+            }
+          });
+          var orphanKeys=Object.keys(orphanedStations);
+          if(orphanKeys.length){
+            var totalOrphan=orphanKeys.reduce(function(a,k){return a+orphanedStations[k];},0);
+            addIssue('warn','&#128193;','سجلات حضور لمحطات محذوفة',
+              'يوجد '+totalOrphan+' سجل حضور تابع لمحطات تم حذفها من النظام ('+orphanKeys.join('، ')+'). البيانات محفوظة لكنها غير مرتبطة بمحطة حالية.');
+          }
+
+          // 5) تكرار اسم موظف أكثر من مرة بنفس المحطة
+          (allStations||[]).forEach(function(s){
+            var emps=s.employees||[];
+            var seen={},dup=[];
+            emps.forEach(function(e){
+              if(seen[e])dup.push(e);else seen[e]=true;
+            });
+            if(dup.length){
+              addIssue('warn','&#128101;','اسم موظف مكرر في نفس المحطة','محطة "'+s.name+'" فيها تكرار للاسم: '+dup.join('، ')+'. تأكد أنه ليس خطأ كتابة لاسمين مختلفين.');
+            }
+          });
+
+          // 6) فحص الاتصال بـ Supabase (فحص حي فعلي)
+          fetch(SB_URL+'/rest/v1/stations?select=id&limit=1',{headers:SBH}).then(function(r){
+            if(!r.ok){
+              addIssue('crit','&#128268;','مشكلة في الاتصال بقاعدة البيانات','فشل الاتصال بـ Supabase (رمز الحالة: '+r.status+'). تحقق من صلاحية المفتاح أو حالة الخدمة.');
+            }
+            finishDiagnostics(issues,allStations,allAttendance,allLinks,allUsers);
+          }).catch(function(){
+            addIssue('crit','&#128268;','لا يوجد اتصال بقاعدة البيانات','تعذر الوصول لـ Supabase بالكامل. تحقق من الاتصال بالانترنت.');
+            finishDiagnostics(issues,allStations,allAttendance,allLinks,allUsers);
+          });
+        });
+      });
+    });
+  });
+}
+
+function finishDiagnostics(issues,allStations,allAttendance,allLinks,allUsers){
+  var btn=document.getElementById('runDiagBtn');
+  var box=document.getElementById('diagBox');
+  var sumEl=document.getElementById('diagSummary');
+  btn.disabled=false;btn.innerHTML='&#129513; فحص النظام الآن';
+
+  var crit=issues.filter(function(i){return i.sev==='crit';}).length;
+  var warn=issues.filter(function(i){return i.sev==='warn';}).length;
+  var info=issues.filter(function(i){return i.sev==='info';}).length;
+
+  sumEl.innerHTML='<div class="diag-summary">'+
+    '<div class="diag-sum-card"><div class="diag-sum-n" style="color:var(--red)">'+crit+'</div><div class="diag-sum-l">حرج</div></div>'+
+    '<div class="diag-sum-card"><div class="diag-sum-n" style="color:var(--gold)">'+warn+'</div><div class="diag-sum-l">تحذير</div></div>'+
+    '<div class="diag-sum-card"><div class="diag-sum-n" style="color:var(--blue)">'+info+'</div><div class="diag-sum-l">معلومة</div></div>'+
+  '</div>';
+
+  if(!issues.length){
+    box.innerHTML='<div class="diag-item sev-ok"><div class="diag-head">'+
+      '<div class="diag-ic">&#9989;</div>'+
+      '<div><div class="diag-title">كل شيء يبدو سليماً</div>'+
+      '<div class="diag-desc">لم يتم اكتشاف أي مشاكل في البيانات أو الاتصال وقت هذا الفحص.</div></div>'+
+    '</div></div>';
+    logAudit('فحص النظام','لا توجد مشاكل');
+    return;
+  }
+
+  // ترتيب: حرج أولاً، بعدين تحذير، بعدين معلومة
+  var order={crit:0,warn:1,info:2,ok:3};
+  issues.sort(function(a,b){return order[a.sev]-order[b.sev];});
+
+  box.innerHTML=issues.map(function(iss,idx){
+    var fixBtn='';
+    if(iss.fixLabel)fixBtn='<button class="diag-fix-btn" onclick="diagApplyFix('+idx+')">'+iss.fixLabel+'</button>';
+    return '<div class="diag-item sev-'+iss.sev+'"><div class="diag-head">'+
+      '<div class="diag-ic">'+iss.icon+'</div>'+
+      '<div style="flex:1"><div class="diag-title">'+iss.title+'</div>'+
+      '<div class="diag-desc">'+iss.desc+'</div>'+fixBtn+'</div>'+
+    '</div></div>';
+  }).join('');
+
+  window._diagIssues=issues;
+  logAudit('فحص النظام',crit+' حرج، '+warn+' تحذير، '+info+' معلومة');
+}
+window.diagApplyFix=function(idx){
+  var iss=(window._diagIssues||[])[idx];
+  if(iss&&iss.fixFn)iss.fixFn();
 };
 
 function loadStats(){
