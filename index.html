@@ -453,9 +453,13 @@ select.sel:focus{border-color:var(--blue);}
 .diag-ic{font-size:18px;flex-shrink:0;margin-top:1px;}
 .diag-title{font-size:14px;font-weight:900;}
 .diag-desc{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.6;}
-.diag-fix-btn{margin-top:10px;padding:8px 14px;border-radius:9px;font-size:12px;font-weight:700;
+.diag-btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+.diag-fix-btn{padding:8px 14px;border-radius:9px;font-size:12px;font-weight:700;
   border:none;cursor:pointer;background:var(--grad-main);color:#fff;}
 .diag-fix-btn:active{opacity:.85;}
+.diag-goto-btn{padding:8px 14px;border-radius:9px;font-size:12px;font-weight:700;
+  border:1.5px solid var(--border);cursor:pointer;background:var(--card);color:var(--text);}
+.diag-goto-btn:active{opacity:.8;}
 
 /* SKELETON LOADING */
 @keyframes skeleton-pulse{0%,100%{opacity:.55}50%{opacity:1}}
@@ -2616,8 +2620,25 @@ function runDiagnostics(){
   sumEl.innerHTML='';
 
   var issues=[];
-  function addIssue(sev,icon,title,desc,fixFn,fixLabel){
-    issues.push({sev:sev,icon:icon,title:title,desc:desc,fixFn:fixFn,fixLabel:fixLabel});
+  function addIssue(sev,icon,title,desc,fixFn,fixLabel,goTo,goToLabel){
+    issues.push({sev:sev,icon:icon,title:title,desc:desc,fixFn:fixFn,fixLabel:fixLabel,goTo:goTo,goToLabel:goToLabel});
+  }
+  // الانتقال المباشر لتاب معيّن داخل لوحة المسؤول، مع تمييز بصري مؤقت للعنصر المقصود لو وُجد
+  function goToTab(tabId,highlightId,afterCb){
+    var btn=document.getElementById(tabId);
+    if(btn)btn.click();
+    if(highlightId||afterCb){
+      setTimeout(function(){
+        if(afterCb)afterCb();
+        var el=document.getElementById(highlightId);
+        if(el){
+          el.scrollIntoView({behavior:'smooth',block:'center'});
+          el.style.transition='box-shadow .3s';
+          el.style.boxShadow='0 0 0 3px rgba(245,158,11,.6)';
+          setTimeout(function(){el.style.boxShadow='';},2500);
+        }
+      },550);
+    }
   }
 
   sbGet('stations','select=*',function(allStations){
@@ -2628,33 +2649,83 @@ function runDiagnostics(){
           // 1) محطات بدون مدير
           (allStations||[]).forEach(function(s){
             if(!s.manager||!s.manager.trim()){
-              addIssue('crit','&#9888;&#65039;','محطة بدون مدير','محطة "'+s.name+'" مسجلة بدون اسم مدير، وده يمنع توليد رابط تسجيل صحيح لها.');
+              addIssue('crit','&#9888;&#65039;','محطة بدون مدير',
+                'محطة "'+s.name+'" مسجلة بدون اسم مدير، وده يمنع توليد رابط تسجيل صحيح لها. الحل: روح لكارت المحطة وادخل اسم المدير في الحقل المخصص.',
+                null,null,
+                function(){goToTab('tab-stations','sc'+s.id,function(){var c=document.getElementById('sc'+s.id);if(c&&!c.classList.contains('open'))window._toggleSt(s.id);});},
+                'روح للمحطة');
             }
             if(!s.employees||!s.employees.length){
-              addIssue('warn','&#128101;','محطة بدون موظفين','محطة "'+s.name+'" ليس لها أي موظفين مسجلين، فلن يظهر أحد في رابط التسجيل سوى المدير.');
+              addIssue('warn','&#128101;','محطة بدون موظفين',
+                'محطة "'+s.name+'" ليس لها أي موظفين مسجلين، فلن يظهر أحد في رابط التسجيل سوى المدير. الحل: روح لكارت المحطة ودوس "+ موظف" لإضافة الأسماء.',
+                null,null,
+                function(){goToTab('tab-stations','sc'+s.id,function(){var c=document.getElementById('sc'+s.id);if(c&&!c.classList.contains('open'))window._toggleSt(s.id);});},
+                'روح للمحطة');
             }
           });
 
           // 2) مستخدمين بكلمة مرور ضعيفة
+          function genStrongPassword(){
+            var chars='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+            var out='';
+            for(var i=0;i<10;i++)out+=chars.charAt(Math.floor(Math.random()*chars.length));
+            return out;
+          }
+          function fixWeakPassword(username){
+            var isSelf=username===localStorage.getItem('att_user');
+            confirmModal(
+              'تغيير كلمة المرور',
+              isSelf?'هذا حسابك الحالي! سيتم توليد كلمة مرور جديدة قوية. احفظها فوراً لأنك ستحتاجها لتسجيل الدخول مرة أخرى.':
+                'سيتم توليد كلمة مرور جديدة قوية لـ "'+username+'" وتحديثها فوراً.',
+              function(){
+                var newPass=genStrongPassword();
+                sbPatch('app_users','username=eq.'+encodeURIComponent(username),{password:newPass}).then(function(ok){
+                  if(ok){
+                    logAudit('إصلاح تلقائي - كلمة مرور ضعيفة',username);
+                    confirmModal(
+                      'تم تغيير كلمة المرور',
+                      '',
+                      null,
+                      {okLabel:'تم الحفظ',extraHtml:
+                        'كلمة المرور الجديدة لـ <b>'+username+'</b>:<br>'+
+                        '<div style="margin-top:10px;padding:12px;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;'+
+                        'font-family:monospace;font-size:18px;font-weight:900;color:var(--gold);text-align:center;letter-spacing:1px">'+newPass+'</div>'+
+                        '<div style="margin-top:8px;font-size:12px;color:var(--muted)">احفظها الآن، لن تظهر لك مرة أخرى بهذا الشكل</div>'
+                      }
+                    );
+                    if(document.getElementById('view-diag').classList.contains('on'))runDiagnostics();
+                  } else toast('فشل التحديث، حاول من صفحة المستخدمين','err');
+                });
+              },
+              {okLabel:'توليد وتحديث الآن'}
+            );
+          }
           (allUsers||[]).forEach(function(u){
             if(!u.password||u.password.length<4){
-              addIssue('crit','&#128274;','كلمة مرور ضعيفة جداً','المستخدم "'+u.username+'" كلمة مروره أقل من 4 أحرف، يسهل تخمينها.');
+              addIssue('crit','&#128274;','كلمة مرور ضعيفة جداً',
+                'المستخدم "'+u.username+'" كلمة مروره أقل من 4 أحرف، يسهل تخمينها. الإصلاح يولّد كلمة مرور قوية عشوائية ويحدّثها فوراً (وستظهر لك بعد الضغط لتدوينها).',
+                function(){fixWeakPassword(u.username);},'إصلاح الآن (توليد كلمة قوية)');
             } else if(u.password.toLowerCase()===u.username.toLowerCase()){
-              addIssue('crit','&#128274;','كلمة مرور = اسم المستخدم','المستخدم "'+u.username+'" كلمة مروره مطابقة لاسم المستخدم، وده خطر أمان واضح.');
+              addIssue('crit','&#128274;','كلمة مرور = اسم المستخدم',
+                'المستخدم "'+u.username+'" كلمة مروره مطابقة لاسم المستخدم، وده خطر أمان واضح. الإصلاح يولّد كلمة مرور قوية عشوائية ويحدّثها فوراً (وستظهر لك بعد الضغط لتدوينها).',
+                function(){fixWeakPassword(u.username);},'إصلاح الآن (توليد كلمة قوية)');
             }
           });
 
           // 3) روابط مدير قديمة لم تُستخدم منذ فترة طويلة (أكثر من 3 أيام بدون استخدام)
-          var oldLinksCount=0;
+          var oldLinksCount=0,oldLinksStations=[];
           (allLinks||[]).forEach(function(l){
             if(l.created_date&&!l.used_date){
               var created=new Date(l.created_date+'T00:00:00');
               var diffDays=Math.floor((new Date(todayISO+'T00:00:00')-created)/86400000);
-              if(diffDays>=3)oldLinksCount++;
+              if(diffDays>=3){oldLinksCount++;if(l.station_name)oldLinksStations.push(l.station_name);}
             }
           });
           if(oldLinksCount>0){
-            addIssue('info','&#128279;','روابط لم تُستخدم منذ فترة','يوجد '+oldLinksCount+' رابط مدير تم إنشاؤه ولم يُستخدم منذ 3 أيام أو أكثر. تأكد أن المدير المعني يستلم الرابط بشكل صحيح.');
+            addIssue('info','&#128279;','روابط لم تُستخدم منذ فترة',
+              'يوجد '+oldLinksCount+' رابط مدير ('+oldLinksStations.join('، ')+') لم يُستخدم منذ 3 أيام أو أكثر. الرابط يتجدد تلقائياً كل يوم، فلا يحتاج إصلاحاً، لكن يُفضّل التأكد أن المدير يستلم رابطه اليومي بشكل صحيح من صفحة الروابط.',
+              null,null,
+              function(){goToTab('tab-links');},'روح لصفحة الروابط');
           }
 
           // 4) سجلات حضور تابعة لمحطات محذوفة (orphaned records)
@@ -2669,7 +2740,9 @@ function runDiagnostics(){
           if(orphanKeys.length){
             var totalOrphan=orphanKeys.reduce(function(a,k){return a+orphanedStations[k];},0);
             addIssue('warn','&#128193;','سجلات حضور لمحطات محذوفة',
-              'يوجد '+totalOrphan+' سجل حضور تابع لمحطات تم حذفها من النظام ('+orphanKeys.join('، ')+'). البيانات محفوظة لكنها غير مرتبطة بمحطة حالية.');
+              'يوجد '+totalOrphan+' سجل حضور تابع لمحطات تم حذفها من النظام ('+orphanKeys.join('، ')+'). البيانات محفوظة لكنها غير مرتبطة بمحطة حالية. الحل: روح لصفحة السجلات، استخدم خانة البحث بالاسم لإيجادها، وقرر بنفسك إن كانت تحتاج حذفاً أم أرشفة فقط (لم نحذفها تلقائياً حفاظاً على بياناتك).',
+              null,null,
+              function(){goToTab('tab-records');},'روح لصفحة السجلات');
           }
 
           // 5) تكرار اسم موظف أكثر من مرة بنفس المحطة
@@ -2680,18 +2753,24 @@ function runDiagnostics(){
               if(seen[e])dup.push(e);else seen[e]=true;
             });
             if(dup.length){
-              addIssue('warn','&#128101;','اسم موظف مكرر في نفس المحطة','محطة "'+s.name+'" فيها تكرار للاسم: '+dup.join('، ')+'. تأكد أنه ليس خطأ كتابة لاسمين مختلفين.');
+              addIssue('warn','&#128101;','اسم موظف مكرر في نفس المحطة',
+                'محطة "'+s.name+'" فيها تكرار للاسم: '+dup.join('، ')+'. تأكد أنه ليس خطأ كتابة لاسمين مختلفين. الحل: روح لكارت المحطة وعدّل الاسم المكرر من قائمة الموظفين.',
+                null,null,
+                function(){goToTab('tab-stations','sc'+s.id,function(){var c=document.getElementById('sc'+s.id);if(c&&!c.classList.contains('open'))window._toggleSt(s.id);});},
+                'روح للمحطة');
             }
           });
 
           // 6) فحص الاتصال بـ Supabase (فحص حي فعلي)
           fetch(SB_URL+'/rest/v1/stations?select=id&limit=1',{headers:SBH}).then(function(r){
             if(!r.ok){
-              addIssue('crit','&#128268;','مشكلة في الاتصال بقاعدة البيانات','فشل الاتصال بـ Supabase (رمز الحالة: '+r.status+'). تحقق من صلاحية المفتاح أو حالة الخدمة.');
+              addIssue('crit','&#128268;','مشكلة في الاتصال بقاعدة البيانات',
+                'فشل الاتصال بـ Supabase (رمز الحالة: '+r.status+'). الحل: افتح لوحة تحكم Supabase وتأكد من أن المشروع نشط (لم يتوقف بسبب عدم الاستخدام)، وأن مفتاح API لم يُغيّر.');
             }
             finishDiagnostics(issues,allStations,allAttendance,allLinks,allUsers);
           }).catch(function(){
-            addIssue('crit','&#128268;','لا يوجد اتصال بقاعدة البيانات','تعذر الوصول لـ Supabase بالكامل. تحقق من الاتصال بالانترنت.');
+            addIssue('crit','&#128268;','لا يوجد اتصال بقاعدة البيانات',
+              'تعذر الوصول لـ Supabase بالكامل. الحل: تحقق من اتصالك بالانترنت أولاً، وإذا كان متصلاً تحقق من حالة خدمة Supabase نفسها.');
             finishDiagnostics(issues,allStations,allAttendance,allLinks,allUsers);
           });
         });
@@ -2731,12 +2810,14 @@ function finishDiagnostics(issues,allStations,allAttendance,allLinks,allUsers){
   issues.sort(function(a,b){return order[a.sev]-order[b.sev];});
 
   box.innerHTML=issues.map(function(iss,idx){
-    var fixBtn='';
-    if(iss.fixLabel)fixBtn='<button class="diag-fix-btn" onclick="diagApplyFix('+idx+')">'+iss.fixLabel+'</button>';
+    var btns='';
+    if(iss.fixLabel)btns+='<button class="diag-fix-btn" onclick="diagApplyFix('+idx+')">&#9889; '+iss.fixLabel+'</button>';
+    if(iss.goToLabel)btns+='<button class="diag-goto-btn" onclick="diagGoTo('+idx+')">&#8594; '+iss.goToLabel+'</button>';
     return '<div class="diag-item sev-'+iss.sev+'"><div class="diag-head">'+
       '<div class="diag-ic">'+iss.icon+'</div>'+
       '<div style="flex:1"><div class="diag-title">'+iss.title+'</div>'+
-      '<div class="diag-desc">'+iss.desc+'</div>'+fixBtn+'</div>'+
+      '<div class="diag-desc">'+iss.desc+'</div>'+
+      (btns?'<div class="diag-btn-row">'+btns+'</div>':'')+'</div>'+
     '</div></div>';
   }).join('');
 
@@ -2746,6 +2827,10 @@ function finishDiagnostics(issues,allStations,allAttendance,allLinks,allUsers){
 window.diagApplyFix=function(idx){
   var iss=(window._diagIssues||[])[idx];
   if(iss&&iss.fixFn)iss.fixFn();
+};
+window.diagGoTo=function(idx){
+  var iss=(window._diagIssues||[])[idx];
+  if(iss&&iss.goTo)iss.goTo();
 };
 
 function loadStats(){
