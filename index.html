@@ -703,6 +703,22 @@ select.sel:focus{border-color:var(--blue);}
   </div>
 </div>
 
+<!-- EXPORT MODE MODAL (Excel & PDF) -->
+<div class="ov" id="xlsModeOv">
+  <div class="modal" style="max-width:360px;text-align:center">
+    <div style="font-size:40px;margin-bottom:10px">&#128202;</div>
+    <h3 id="xlsModeTitle">طريقة التصدير</h3>
+    <p style="margin-bottom:16px">اختر شكل الملف المطلوب</p>
+    <button class="btn btn-blue btn-full" id="xlsModeSeparateBtn" style="margin-bottom:8px">
+      &#128193; <span id="xlsModeSeparateLabel">شيت لكل محطة</span> (الافتراضي)
+    </button>
+    <button class="btn btn-ghost btn-full" id="xlsModeCombinedBtn" style="margin-bottom:8px">
+      &#128203; كل المحطات في <span id="xlsModeCombinedLabel">شيت واحد</span>
+    </button>
+    <button class="btn btn-ghost" id="xlsModeCancelBtn" style="width:100%">إلغاء</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1559,7 +1575,9 @@ function setupRecordsBtns(){
   // تصدير PDF
   document.getElementById('expPdfBtn').addEventListener('click',function(){
     if(!records.length){toast('اضغط بحث اولا','warn');return;}
-    buildPDF(records,document.getElementById('dateInput').value||todayISO);
+    askExcelMode(function(mode){
+      buildPDF(records,document.getElementById('dateInput').value||todayISO,mode);
+    },'pdf');
   });
 
   // نسخ للواتساب
@@ -1571,31 +1589,35 @@ function setupRecordsBtns(){
   document.getElementById('expDayBtn').addEventListener('click',function(){
     var date=document.getElementById('dateInput').value||todayISO;
     if(!records.length){toast('اضغط بحث اولا','warn');return;}
-    buildExcel(records,date,false);
+    askExcelMode(function(mode){ buildExcel(records,date,false,mode); });
   });
   document.getElementById('expMonBtn').addEventListener('click',function(){
-    var now=new Date(),y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,'0');
-    var last=new Date(y,now.getMonth()+1,0).getDate();
-    toast('جاري تحميل بيانات الشهر...','ok');
-    sbGet('attendance','report_date_iso=gte.'+y+'-'+m+'-01&report_date_iso=lte.'+y+'-'+m+'-'+String(last).padStart(2,'0')+'&order=created_at.asc&limit=2000',function(data){
-      if(!data.length){toast('لا توجد بيانات هذا الشهر','warn');return;}
-      buildExcel(data,null,true);
+    askExcelMode(function(mode){
+      var now=new Date(),y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,'0');
+      var last=new Date(y,now.getMonth()+1,0).getDate();
+      toast('جاري تحميل بيانات الشهر...','ok');
+      sbGet('attendance','report_date_iso=gte.'+y+'-'+m+'-01&report_date_iso=lte.'+y+'-'+m+'-'+String(last).padStart(2,'0')+'&order=created_at.asc&limit=2000',function(data){
+        if(!data.length){toast('لا توجد بيانات هذا الشهر','warn');return;}
+        buildExcel(data,null,true,mode);
+      });
     });
   });
 
   document.getElementById('expWekBtn').addEventListener('click',function(){
-    var now=new Date();
-    var day=now.getDay();
-    // الأسبوع من الأحد للسبت
-    var diffSun=day===0?0:day;
-    var sun=new Date(now); sun.setDate(now.getDate()-diffSun);
-    var sat=new Date(sun); sat.setDate(sun.getDate()+6);
-    var fmt=function(d){return d.toISOString().split('T')[0];};
-    var startISO=fmt(sun), endISO=fmt(sat);
-    toast('جاري تحميل بيانات الأسبوع...','ok');
-    sbGet('attendance','report_date_iso=gte.'+startISO+'&report_date_iso=lte.'+endISO+'&order=created_at.asc&limit=1000',function(data){
-      if(!data.length){toast('لا توجد بيانات هذا الأسبوع','warn');return;}
-      buildExcelWeek(data,startISO,endISO);
+    askExcelMode(function(mode){
+      var now=new Date();
+      var day=now.getDay();
+      // الأسبوع من الأحد للسبت
+      var diffSun=day===0?0:day;
+      var sun=new Date(now); sun.setDate(now.getDate()-diffSun);
+      var sat=new Date(sun); sat.setDate(sun.getDate()+6);
+      var fmt=function(d){return d.toISOString().split('T')[0];};
+      var startISO=fmt(sun), endISO=fmt(sat);
+      toast('جاري تحميل بيانات الأسبوع...','ok');
+      sbGet('attendance','report_date_iso=gte.'+startISO+'&report_date_iso=lte.'+endISO+'&order=created_at.asc&limit=1000',function(data){
+        if(!data.length){toast('لا توجد بيانات هذا الأسبوع','warn');return;}
+        buildExcelWeek(data,startISO,endISO,mode);
+      });
     });
   });
   document.getElementById('delAllBtn').addEventListener('click',function(){
@@ -1758,10 +1780,10 @@ function loadCompare(d1,d2){
 }
 
 // ── PDF ──
-function buildPDF(data,dateLabel){
+function buildPDF(data,dateLabel,mode){
   if(!data||!data.length){toast('لا توجد بيانات','warn');return;}
+  mode=mode||'separate';
   var now=new Date();
-  var pm={'حاضر':'✅','راحة':'☕','عطلة':'🎉','مرضي':'🏥','اجازة':'🌴','انقطاع':'❌'};
   var html='<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8">'+
     '<style>body{font-family:Arial,sans-serif;padding:20px;color:#111;direction:rtl}'+
     'h1{font-size:18px;margin-bottom:4px}'+
@@ -1772,9 +1794,9 @@ function buildPDF(data,dateLabel){
     'tr:nth-child(even){background:#f8faff}'+
     '.station{font-size:15px;font-weight:bold;margin:16px 0 6px;color:#3b82f6}'+
     '.footer{font-size:11px;color:#aaa;margin-top:30px;text-align:center}'+
-    '@media print{button{display:none}}'+
+    '@media print{.no-print{display:none}}'+
     '</style></head><body>'+
-    '<button onclick="window.print()" style="margin-bottom:16px;padding:8px 18px;background:#3b82f6;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px">🖨️ طباعة</button>'+
+    '<button class="no-print" onclick="window.print()" style="margin-bottom:16px;padding:8px 18px;background:#3b82f6;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px">طباعة</button>'+
     '<h1>تقرير الحضور</h1>'+
     '<div class="sub">'+dateLabel+' — تم التصدير: '+now.toLocaleString('ar-EG')+'</div>';
 
@@ -1784,14 +1806,24 @@ function buildPDF(data,dateLabel){
     (r.employees||[]).forEach(function(e){stMap[r.station].emps.push(e);});
   });
 
-  Object.keys(stMap).forEach(function(st){
-    var info=stMap[st];
-    html+='<div class="station">'+st+' — المدير: '+info.manager+' — '+info.time+'</div>'+
-      '<table><tr><th>الموظف</th><th>الحالة</th><th>ملاحظة</th></tr>'+
-      info.emps.map(function(e){
-        return '<tr><td>'+e.name+'</td><td>'+(pm[e.status]||'')+' '+e.status+'</td><td>'+(e.note||'—')+'</td></tr>';
+  if(mode==='combined'){
+    html+='<table><tr><th>المحطة</th><th>الموظف</th><th>الحالة</th><th>ملاحظة</th></tr>'+
+      Object.keys(stMap).map(function(st){
+        var info=stMap[st];
+        return info.emps.map(function(e){
+          return '<tr><td>'+st+'</td><td>'+e.name+'</td><td>'+e.status+'</td><td>'+(e.note||'—')+'</td></tr>';
+        }).join('');
       }).join('')+'</table>';
-  });
+  } else {
+    Object.keys(stMap).forEach(function(st){
+      var info=stMap[st];
+      html+='<div class="station">'+st+' — المدير: '+info.manager+' — '+info.time+'</div>'+
+        '<table><tr><th>الموظف</th><th>الحالة</th><th>ملاحظة</th></tr>'+
+        info.emps.map(function(e){
+          return '<tr><td>'+e.name+'</td><td>'+e.status+'</td><td>'+(e.note||'—')+'</td></tr>';
+        }).join('')+'</table>';
+    });
+  }
 
   html+='<div class="footer">Powered by Hisham Fadloun — نظام تسجيل الحضور</div></body></html>';
   var win=window.open('','_blank');
@@ -2106,9 +2138,10 @@ function xlsxStyledSheet(headerRow,dataRows,colTypes,opts){
   return ws;
 }
 
-function buildExcel(data,dateLabel,isMonth){
+function buildExcel(data,dateLabel,isMonth,mode){
   if(!data||!data.length){toast('لا توجد بيانات','warn');return;}
   if(typeof XLSX==='undefined'){toast('انتظر ثم حاول مرة اخرى','warn');return;}
+  mode=mode||'separate';
   var now=new Date(),y=now.getFullYear(),m=now.getMonth();
   var exportStamp='تاريخ التصدير: '+now.toLocaleString('ar-EG');
   var days=[];
@@ -2151,24 +2184,46 @@ function buildExcel(data,dateLabel,isMonth){
   XLSX.utils.sheet_add_aoa(ws2,[[exportStamp]],{origin:-1});
   XLSX.utils.book_append_sheet(wb,ws2,'ملخص');
 
-  // 2) شيت لكل محطة
-  sts.forEach(function(st){
-    var sd=dataMap[st.name]||{};
-    var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
-    var hdr=['الموظف'].concat(days.map(function(d){return d.lbl;})).concat(['حاضر','راحة','عطلة','مرضي','اجازة','انقطاع','نسبة الحضور']);
-    var rows=pp.map(function(name){
-      var ed=sd[name]||{};
-      function cnt(k){return days.filter(function(d){return(ed[d.iso]||{}).status===k;}).length;}
-      var cells=days.map(function(d){var e=ed[d.iso];if(!e||!e.status||e.status==='-')return '-';return e.note?e.status+' - '+e.note:e.status;});
-      var pr=cnt('حاضر'),rs=cnt('راحة'),hl=cnt('عطلة'),sk=cnt('مرضي'),vc=cnt('اجازة'),ab=cnt('انقطاع');
-      var tt=pr+rs+hl+sk+vc+ab;
-      return [name].concat(cells).concat([pr,rs,hl,sk,vc,ab,tt?Math.round(pr/tt*100)+'%':'-']);
+  if(mode==='combined'){
+    // 2) شيت واحد مدمج لكل المحطات (عمود "المحطة" يميز كل صف)
+    var hdrC=['المحطة','الموظف'].concat(days.map(function(d){return d.lbl;})).concat(['حاضر','راحة','عطلة','مرضي','اجازة','انقطاع','نسبة الحضور']);
+    var rowsC=[];
+    sts.forEach(function(st){
+      var sd=dataMap[st.name]||{};
+      var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
+      pp.forEach(function(name){
+        var ed=sd[name]||{};
+        function cnt(k){return days.filter(function(d){return(ed[d.iso]||{}).status===k;}).length;}
+        var cells=days.map(function(d){var e=ed[d.iso];if(!e||!e.status||e.status==='-')return '-';return e.note?e.status+' - '+e.note:e.status;});
+        var pr=cnt('حاضر'),rs=cnt('راحة'),hl=cnt('عطلة'),sk=cnt('مرضي'),vc=cnt('اجازة'),ab=cnt('انقطاع');
+        var tt=pr+rs+hl+sk+vc+ab;
+        rowsC.push([st.name,name].concat(cells).concat([pr,rs,hl,sk,vc,ab,tt?Math.round(pr/tt*100)+'%':'-']));
+      });
     });
-    var colTypes=['name'].concat(days.map(function(){return 'status';})).concat(['num','num','num','num','num','num','pct']);
-    var colWidths=[{wch:16}].concat(days.map(function(){return{wch:isMonth?11:16};})).concat([{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:9},{wch:11}]);
-    var ws=xlsxStyledSheet(hdr,rows,colTypes,{colWidths:colWidths});
-    XLSX.utils.book_append_sheet(wb,ws,st.name.substring(0,31));
-  });
+    var colTypesC=['text','name'].concat(days.map(function(){return 'status';})).concat(['num','num','num','num','num','num','pct']);
+    var colWidthsC=[{wch:16},{wch:16}].concat(days.map(function(){return{wch:isMonth?11:16};})).concat([{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:9},{wch:11}]);
+    var wsC=xlsxStyledSheet(hdrC,rowsC,colTypesC,{colWidths:colWidthsC});
+    XLSX.utils.book_append_sheet(wb,wsC,'كل المحطات');
+  } else {
+    // 2) شيت لكل محطة على حدة
+    sts.forEach(function(st){
+      var sd=dataMap[st.name]||{};
+      var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
+      var hdr=['الموظف'].concat(days.map(function(d){return d.lbl;})).concat(['حاضر','راحة','عطلة','مرضي','اجازة','انقطاع','نسبة الحضور']);
+      var rows=pp.map(function(name){
+        var ed=sd[name]||{};
+        function cnt(k){return days.filter(function(d){return(ed[d.iso]||{}).status===k;}).length;}
+        var cells=days.map(function(d){var e=ed[d.iso];if(!e||!e.status||e.status==='-')return '-';return e.note?e.status+' - '+e.note:e.status;});
+        var pr=cnt('حاضر'),rs=cnt('راحة'),hl=cnt('عطلة'),sk=cnt('مرضي'),vc=cnt('اجازة'),ab=cnt('انقطاع');
+        var tt=pr+rs+hl+sk+vc+ab;
+        return [name].concat(cells).concat([pr,rs,hl,sk,vc,ab,tt?Math.round(pr/tt*100)+'%':'-']);
+      });
+      var colTypes=['name'].concat(days.map(function(){return 'status';})).concat(['num','num','num','num','num','num','pct']);
+      var colWidths=[{wch:16}].concat(days.map(function(){return{wch:isMonth?11:16};})).concat([{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:9},{wch:11}]);
+      var ws=xlsxStyledSheet(hdr,rows,colTypes,{colWidths:colWidths});
+      XLSX.utils.book_append_sheet(wb,ws,st.name.substring(0,31));
+    });
+  }
 
   var fname=isMonth?'حضور_شهر_'+now.toLocaleDateString('ar-EG',{month:'long',year:'numeric'}).replace(' ','-')+'.xlsx':'حضور_يوم_'+(dateLabel||todayISO)+'.xlsx';
   var wbout=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
@@ -2180,9 +2235,10 @@ function buildExcel(data,dateLabel,isMonth){
 }
 
 // ── WEEKLY EXCEL ──
-function buildExcelWeek(data,startISO,endISO){
+function buildExcelWeek(data,startISO,endISO,mode){
   if(!data||!data.length){toast('لا توجد بيانات','warn');return;}
   if(typeof XLSX==='undefined'){toast('انتظر ثم حاول مرة اخرى','warn');return;}
+  mode=mode||'separate';
 
   // بناء أيام الأسبوع
   var days=[];
@@ -2234,29 +2290,56 @@ function buildExcelWeek(data,startISO,endISO){
   XLSX.utils.sheet_add_aoa(ws2,[[exportStamp]],{origin:-1});
   XLSX.utils.book_append_sheet(wb,ws2,'ملخص الأسبوع');
 
-  // 2) شيت لكل محطة
-  sts.forEach(function(st){
-    var sd=dataMap[st.name]||{};
-    var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
-    var hdr=['الموظف'].concat(days.map(function(d){return d.lbl;})).concat(['حاضر','غياب','نسبة الحضور']);
-    var rows=pp.map(function(name){
-      var ed=sd[name]||{};
-      var cells=days.map(function(d){
-        var e=ed[d.iso];
-        if(!e||!e.status||e.status==='-')return '-';
-        return e.note?e.status+' - '+e.note:e.status;
+  if(mode==='combined'){
+    // 2) شيت واحد مدمج لكل المحطات
+    var hdrC=['المحطة','الموظف'].concat(days.map(function(d){return d.lbl;})).concat(['حاضر','غياب','نسبة الحضور']);
+    var rowsC=[];
+    sts.forEach(function(st){
+      var sd=dataMap[st.name]||{};
+      var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
+      pp.forEach(function(name){
+        var ed=sd[name]||{};
+        var cells=days.map(function(d){
+          var e=ed[d.iso];
+          if(!e||!e.status||e.status==='-')return '-';
+          return e.note?e.status+' - '+e.note:e.status;
+        });
+        var pr=days.filter(function(d){return(ed[d.iso]||{}).status==='حاضر';}).length;
+        var worked=days.filter(function(d){return ed[d.iso]&&ed[d.iso].status&&ed[d.iso].status!=='-';}).length;
+        var ab=worked-pr;
+        var pct=worked?Math.round(pr/worked*100)+'%':'-';
+        rowsC.push([st.name,name].concat(cells).concat([pr,ab,pct]));
       });
-      var pr=days.filter(function(d){return(ed[d.iso]||{}).status==='حاضر';}).length;
-      var worked=days.filter(function(d){return ed[d.iso]&&ed[d.iso].status&&ed[d.iso].status!=='-';}).length;
-      var ab=worked-pr;
-      var pct=worked?Math.round(pr/worked*100)+'%':'-';
-      return [name].concat(cells).concat([pr,ab,pct]);
     });
-    var colTypes=['name'].concat(days.map(function(){return 'status';})).concat(['num','num','pct']);
-    var colWidths=[{wch:16}].concat(days.map(function(){return{wch:16};})).concat([{wch:9},{wch:9},{wch:13}]);
-    var ws=xlsxStyledSheet(hdr,rows,colTypes,{colWidths:colWidths});
-    XLSX.utils.book_append_sheet(wb,ws,st.name.substring(0,31));
-  });
+    var colTypesC=['text','name'].concat(days.map(function(){return 'status';})).concat(['num','num','pct']);
+    var colWidthsC=[{wch:16},{wch:16}].concat(days.map(function(){return{wch:16};})).concat([{wch:9},{wch:9},{wch:13}]);
+    var wsC=xlsxStyledSheet(hdrC,rowsC,colTypesC,{colWidths:colWidthsC});
+    XLSX.utils.book_append_sheet(wb,wsC,'كل المحطات');
+  } else {
+    // 2) شيت لكل محطة
+    sts.forEach(function(st){
+      var sd=dataMap[st.name]||{};
+      var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
+      var hdr=['الموظف'].concat(days.map(function(d){return d.lbl;})).concat(['حاضر','غياب','نسبة الحضور']);
+      var rows=pp.map(function(name){
+        var ed=sd[name]||{};
+        var cells=days.map(function(d){
+          var e=ed[d.iso];
+          if(!e||!e.status||e.status==='-')return '-';
+          return e.note?e.status+' - '+e.note:e.status;
+        });
+        var pr=days.filter(function(d){return(ed[d.iso]||{}).status==='حاضر';}).length;
+        var worked=days.filter(function(d){return ed[d.iso]&&ed[d.iso].status&&ed[d.iso].status!=='-';}).length;
+        var ab=worked-pr;
+        var pct=worked?Math.round(pr/worked*100)+'%':'-';
+        return [name].concat(cells).concat([pr,ab,pct]);
+      });
+      var colTypes=['name'].concat(days.map(function(){return 'status';})).concat(['num','num','pct']);
+      var colWidths=[{wch:16}].concat(days.map(function(){return{wch:16};})).concat([{wch:9},{wch:9},{wch:13}]);
+      var ws=xlsxStyledSheet(hdr,rows,colTypes,{colWidths:colWidths});
+      XLSX.utils.book_append_sheet(wb,ws,st.name.substring(0,31));
+    });
+  }
 
   var p1=startISO.split('-'),p2=endISO.split('-');
   var fname='حضور_اسبوع_'+p1[2]+'-'+p1[1]+' الى '+p2[2]+'-'+p2[1]+'.xlsx';
@@ -2571,6 +2654,32 @@ document.getElementById('confirmOkBtn').addEventListener('click',function(){
   document.getElementById('confirmOv').classList.remove('open');
   var cb=_confirmCb;_confirmCb=null;
   if(cb)cb();
+});
+
+// ── EXPORT MODE MODAL (Excel & PDF) ──
+var _xlsModeCb=null;
+function askExcelMode(onChoose,fileType){
+  fileType=fileType||'excel';
+  var unitWord=fileType==='pdf'?'جدول':'شيت';
+  document.getElementById('xlsModeTitle').textContent='طريقة تصدير '+(fileType==='pdf'?'PDF':'الإكسيل');
+  document.getElementById('xlsModeSeparateLabel').textContent=unitWord+' لكل محطة';
+  document.getElementById('xlsModeCombinedLabel').textContent=unitWord+' واحد';
+  _xlsModeCb=onChoose;
+  document.getElementById('xlsModeOv').classList.add('open');
+}
+document.getElementById('xlsModeSeparateBtn').addEventListener('click',function(){
+  document.getElementById('xlsModeOv').classList.remove('open');
+  var cb=_xlsModeCb;_xlsModeCb=null;
+  if(cb)cb('separate');
+});
+document.getElementById('xlsModeCombinedBtn').addEventListener('click',function(){
+  document.getElementById('xlsModeOv').classList.remove('open');
+  var cb=_xlsModeCb;_xlsModeCb=null;
+  if(cb)cb('combined');
+});
+document.getElementById('xlsModeCancelBtn').addEventListener('click',function(){
+  document.getElementById('xlsModeOv').classList.remove('open');
+  _xlsModeCb=null;
 });
 
 </script>
