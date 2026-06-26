@@ -298,6 +298,11 @@ select.sel:focus{border-color:var(--blue);}
 .ip-station{font-size:20px;font-weight:900;}
 .ip-mgr{font-size:13px;color:var(--muted);margin-top:3px;}
 .ip-date{font-size:12px;color:var(--blue);margin-top:3px;}
+.ip-clock{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;
+  border-top:1px solid var(--border);}
+.ip-clock-ic{font-size:16px;}
+.ip-clock-time{font-size:17px;font-weight:900;font-family:monospace;letter-spacing:.5px;color:var(--text);}
+.ip-clock-date{font-size:11px;color:var(--muted);margin-top:1px;}
 .prog-bar{background:var(--border);border-radius:30px;height:6px;margin-bottom:6px;overflow:hidden;}
 .prog-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--green));
   border-radius:30px;transition:width .3s;}
@@ -974,6 +979,7 @@ function doLogin(){
 }
 
 var dashTimer=null;
+var mgrClockTimer=null;
 function initAdmin(){
   loadStations(function(){renderSt();loadDash();});
   setupTabs();
@@ -1428,7 +1434,11 @@ function showMgrForm(info,lockKey){
       '<div class="ip">'+
         '<div class="ip-station">'+info.stationName+'</div>'+
         '<div class="ip-mgr">المدير: '+info.managerName+'</div>'+
-        '<div class="ip-date">'+dateStr+'</div>'+
+        '<div class="ip-clock">'+
+          '<div class="ip-clock-ic">&#128337;</div>'+
+          '<div><div class="ip-clock-time" id="mgrClockTime">--:--:--</div>'+
+          '<div class="ip-clock-date" id="mgrClockDate">'+dateStr+'</div></div>'+
+        '</div>'+
       '</div>'+
       '<div class="prog-bar"><div class="prog-fill" id="pf" style="width:0%"></div></div>'+
       '<div class="prog-lbl">سجلت <span id="dc">0</span> من <span id="totalCount">'+total+'</span> شخص</div>'+
@@ -1473,6 +1483,24 @@ function showMgrForm(info,lockKey){
   }
   document.getElementById('addPersonBtn').addEventListener('click',addPerson);
   document.getElementById('newPersonInput').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();addPerson();}});
+
+  // ── الساعة الحية: تتحدث كل ثانية، والتاريخ يتجدد تلقائياً عند تغيّر اليوم ──
+  if(mgrClockTimer)clearInterval(mgrClockTimer);
+  var mgrClockLastDay=new Date().toDateString();
+  function mgrClockTick(){
+    var now=new Date();
+    var timeEl=document.getElementById('mgrClockTime');
+    var dateEl=document.getElementById('mgrClockDate');
+    if(!timeEl||!dateEl){clearInterval(mgrClockTimer);return;} // الصفحة تغيّرت (مثلاً تم إرسال التقرير)
+    timeEl.textContent=now.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    var curDay=now.toDateString();
+    if(curDay!==mgrClockLastDay){
+      mgrClockLastDay=curDay;
+      dateEl.textContent=now.toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+    }
+  }
+  mgrClockTick();
+  mgrClockTimer=setInterval(mgrClockTick,1000);
 
   document.getElementById('subBtn').addEventListener('click',function(){
     var missing=people.filter(function(n){return !att[n];});
