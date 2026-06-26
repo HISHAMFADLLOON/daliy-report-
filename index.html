@@ -2010,10 +2010,107 @@ document.getElementById('saveEditBtn').addEventListener('click',function(){
 });
 
 // ── EXCEL ──
+// ── EXCEL STYLING HELPERS (يستخدم xlsx-js-style) ──
+var XLSX_COLORS={
+  headerBg:'1E3A8A', headerText:'FFFFFF',
+  present:'D1FAE5', presentText:'047857',
+  rest:'DBEAFE', restText:'1D4ED8',
+  holiday:'EDE9FE', holidayText:'6D28D9',
+  sick:'FEF3C7', sickText:'B45309',
+  vacation:'FCE7F3', vacationText:'BE185D',
+  absent:'FEE2E2', absentText:'B91C1C',
+  empty:'F8FAFC', emptyText:'94A3B8',
+  pctGood:'D1FAE5', pctGoodText:'047857',
+  pctMid:'FEF3C7', pctMidText:'B45309',
+  pctBad:'FEE2E2', pctBadText:'B91C1C',
+  nameBg:'EFF6FF'
+};
+var XLSX_STATUS_COLOR_MAP={
+  'حاضر':['present','presentText'],'راحة':['rest','restText'],'عطلة':['holiday','holidayText'],
+  'مرضي':['sick','sickText'],'اجازة':['vacation','vacationText'],'انقطاع':['absent','absentText']
+};
+function xlsxThinBorder(){
+  var b={style:'thin',color:{rgb:'CBD5E1'}};
+  return {top:b,bottom:b,left:b,right:b};
+}
+function xlsxHeaderStyle(){
+  return {font:{bold:true,color:{rgb:XLSX_COLORS.headerText},sz:11},
+    fill:{patternType:'solid',fgColor:{rgb:XLSX_COLORS.headerBg}},
+    alignment:{horizontal:'center',vertical:'center',wrapText:true},
+    border:xlsxThinBorder()};
+}
+function xlsxNameStyle(){
+  return {font:{bold:true,sz:11},
+    fill:{patternType:'solid',fgColor:{rgb:XLSX_COLORS.nameBg}},
+    alignment:{horizontal:'right',vertical:'center'},
+    border:xlsxThinBorder()};
+}
+function xlsxStatusCellStyle(statusText){
+  // statusText قد يحتوي على ملاحظة مثل "مرضي - تعب"، فنأخذ الكلمة الأولى فقط للتلوين
+  var key=(statusText||'').split(' - ')[0].trim();
+  var pair=XLSX_STATUS_COLOR_MAP[key];
+  var bg=pair?XLSX_COLORS[pair[0]]:XLSX_COLORS.empty;
+  var tx=pair?XLSX_COLORS[pair[1]]:XLSX_COLORS.emptyText;
+  return {font:{color:{rgb:tx},sz:10,bold:!!pair},
+    fill:{patternType:'solid',fgColor:{rgb:bg}},
+    alignment:{horizontal:'center',vertical:'center'},
+    border:xlsxThinBorder()};
+}
+function xlsxPctCellStyle(pctText){
+  var n=parseInt(pctText,10);
+  var bg=XLSX_COLORS.empty,tx=XLSX_COLORS.emptyText;
+  if(!isNaN(n)){
+    if(n>=85){bg=XLSX_COLORS.pctGood;tx=XLSX_COLORS.pctGoodText;}
+    else if(n>=60){bg=XLSX_COLORS.pctMid;tx=XLSX_COLORS.pctMidText;}
+    else {bg=XLSX_COLORS.pctBad;tx=XLSX_COLORS.pctBadText;}
+  }
+  return {font:{bold:true,color:{rgb:tx},sz:11},
+    fill:{patternType:'solid',fgColor:{rgb:bg}},
+    alignment:{horizontal:'center',vertical:'center'},
+    border:xlsxThinBorder()};
+}
+function xlsxNumCellStyle(){
+  return {font:{sz:10},alignment:{horizontal:'center',vertical:'center'},border:xlsxThinBorder()};
+}
+function xlsxTextCellStyle(){
+  return {font:{sz:10},alignment:{horizontal:'right',vertical:'center'},border:xlsxThinBorder()};
+}
+// يحوّل صفوف aoa عادية إلى worksheet منسق بالكامل: هيدر، عمود أول (اسم)، خلايا حالة، خلايا نسبة
+// colTypes: مصفوفة بنفس عدد الأعمدة، كل عنصر منها واحد من: 'name','status','num','pct'
+function xlsxStyledSheet(headerRow,dataRows,colTypes,opts){
+  opts=opts||{};
+  var aoa=[headerRow].concat(dataRows);
+  var ws=XLSX.utils.aoa_to_sheet(aoa);
+  // تنسيق الهيدر
+  for(var c=0;c<headerRow.length;c++){
+    var ref=XLSX.utils.encode_cell({r:0,c:c});
+    if(!ws[ref])ws[ref]={v:headerRow[c]||'',t:'s'};
+    ws[ref].s=xlsxHeaderStyle();
+  }
+  // تنسيق صفوف البيانات
+  for(var r=0;r<dataRows.length;r++){
+    for(var c=0;c<colTypes.length;c++){
+      var ref2=XLSX.utils.encode_cell({r:r+1,c:c});
+      if(!ws[ref2])continue;
+      var type=colTypes[c];
+      if(type==='name')ws[ref2].s=xlsxNameStyle();
+      else if(type==='status')ws[ref2].s=xlsxStatusCellStyle(String(ws[ref2].v||''));
+      else if(type==='pct')ws[ref2].s=xlsxPctCellStyle(String(ws[ref2].v||''));
+      else if(type==='text')ws[ref2].s=xlsxTextCellStyle();
+      else ws[ref2].s=xlsxNumCellStyle();
+    }
+  }
+  // ملاحظة: مكتبة xlsx-js-style لا تدعم تجميد الصفوف (freeze panes) فعلياً وقت الكتابة
+  if(opts.colWidths)ws['!cols']=opts.colWidths;
+  if(opts.rowHeight)ws['!rows']=aoa.map(function(){return {hpt:opts.rowHeight};});
+  return ws;
+}
+
 function buildExcel(data,dateLabel,isMonth){
   if(!data||!data.length){toast('لا توجد بيانات','warn');return;}
   if(typeof XLSX==='undefined'){toast('انتظر ثم حاول مرة اخرى','warn');return;}
   var now=new Date(),y=now.getFullYear(),m=now.getMonth();
+  var exportStamp='تاريخ التصدير: '+now.toLocaleString('ar-EG');
   var days=[];
   if(isMonth){
     var last=new Date(y,m+1,0).getDate();
@@ -2034,22 +2131,8 @@ function buildExcel(data,dateLabel,isMonth){
       employees:Array.from(new Set(data.filter(function(r){return r.station===name;}).reduce(function(a,r){return a.concat((r.employees||[]).map(function(e){return e.name;}));},[])))};
   });
   var wb=XLSX.utils.book_new();
-  sts.forEach(function(st){
-    var sd=dataMap[st.name]||{};
-    var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
-    var hdr=['الموظف'].concat(days.map(function(d){return d.lbl;})).concat(['حاضر','راحة','عطلة','مرضي','اجازة','انقطاع','نسبة الحضور']);
-    var rows=pp.map(function(name){
-      var ed=sd[name]||{};
-      function cnt(k){return days.filter(function(d){return(ed[d.iso]||{}).status===k;}).length;}
-      var cells=days.map(function(d){var e=ed[d.iso];if(!e||!e.status||e.status==='-')return '-';return e.note?e.status+' - '+e.note:e.status;});
-      var pr=cnt('حاضر'),rs=cnt('راحة'),hl=cnt('عطلة'),sk=cnt('مرضي'),vc=cnt('اجازة'),ab=cnt('انقطاع');
-      var tt=pr+rs+hl+sk+vc+ab;
-      return [name].concat(cells).concat([pr,rs,hl,sk,vc,ab,tt?Math.round(pr/tt*100)+'%':'-']);
-    });
-    var ws=XLSX.utils.aoa_to_sheet([hdr].concat(rows));
-    ws['!cols']=[{wch:16}].concat(days.map(function(){return{wch:isMonth?13:18};})).concat([{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:11},{wch:13}]);
-    XLSX.utils.book_append_sheet(wb,ws,st.name.substring(0,31));
-  });
+
+  // 1) شيت الملخص أولاً (أهم معلومة في أول صفحة تُفتح)
   var sh=['الموظف','المحطة','المدير','حاضر','راحة','عطلة','مرضي','اجازة','انقطاع','نسبة الحضور'];
   var sr=[];
   sts.forEach(function(st){
@@ -2063,9 +2146,30 @@ function buildExcel(data,dateLabel,isMonth){
       sr.push([name,st.name,st.manager,pr,rs,hl,sk,vc,ab,tt?Math.round(pr/tt*100)+'%':'-']);
     });
   });
-  var ws2=XLSX.utils.aoa_to_sheet([sh].concat(sr));
-  ws2['!cols']=[{wch:16},{wch:16},{wch:16},{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:11},{wch:13}];
+  var ws2=xlsxStyledSheet(sh,sr,['name','text','text','num','num','num','num','num','num','pct'],
+    {colWidths:[{wch:16},{wch:16},{wch:16},{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:11},{wch:13}]});
+  XLSX.utils.sheet_add_aoa(ws2,[[exportStamp]],{origin:-1});
   XLSX.utils.book_append_sheet(wb,ws2,'ملخص');
+
+  // 2) شيت لكل محطة
+  sts.forEach(function(st){
+    var sd=dataMap[st.name]||{};
+    var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
+    var hdr=['الموظف'].concat(days.map(function(d){return d.lbl;})).concat(['حاضر','راحة','عطلة','مرضي','اجازة','انقطاع','نسبة الحضور']);
+    var rows=pp.map(function(name){
+      var ed=sd[name]||{};
+      function cnt(k){return days.filter(function(d){return(ed[d.iso]||{}).status===k;}).length;}
+      var cells=days.map(function(d){var e=ed[d.iso];if(!e||!e.status||e.status==='-')return '-';return e.note?e.status+' - '+e.note:e.status;});
+      var pr=cnt('حاضر'),rs=cnt('راحة'),hl=cnt('عطلة'),sk=cnt('مرضي'),vc=cnt('اجازة'),ab=cnt('انقطاع');
+      var tt=pr+rs+hl+sk+vc+ab;
+      return [name].concat(cells).concat([pr,rs,hl,sk,vc,ab,tt?Math.round(pr/tt*100)+'%':'-']);
+    });
+    var colTypes=['name'].concat(days.map(function(){return 'status';})).concat(['num','num','num','num','num','num','pct']);
+    var colWidths=[{wch:16}].concat(days.map(function(){return{wch:isMonth?11:16};})).concat([{wch:8},{wch:8},{wch:8},{wch:8},{wch:8},{wch:9},{wch:11}]);
+    var ws=xlsxStyledSheet(hdr,rows,colTypes,{colWidths:colWidths});
+    XLSX.utils.book_append_sheet(wb,ws,st.name.substring(0,31));
+  });
+
   var fname=isMonth?'حضور_شهر_'+now.toLocaleDateString('ar-EG',{month:'long',year:'numeric'}).replace(' ','-')+'.xlsx':'حضور_يوم_'+(dateLabel||todayISO)+'.xlsx';
   var wbout=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
   var a=document.createElement('a');
@@ -2109,7 +2213,28 @@ function buildExcelWeek(data,startISO,endISO){
   });
 
   var wb=XLSX.utils.book_new();
+  var exportStamp='تاريخ التصدير: '+new Date().toLocaleString('ar-EG');
 
+  // 1) شيت الملخص أولاً
+  var sh=['الموظف','المحطة','المدير','حاضر','غياب','نسبة الحضور'];
+  var sr=[];
+  sts.forEach(function(st){
+    var sd=dataMap[st.name]||{};
+    var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
+    pp.forEach(function(name){
+      var ed=sd[name]||{};
+      var pr=days.filter(function(d){return(ed[d.iso]||{}).status==='حاضر';}).length;
+      var worked=days.filter(function(d){return ed[d.iso]&&ed[d.iso].status&&ed[d.iso].status!=='-';}).length;
+      var pct=worked?Math.round(pr/worked*100)+'%':'-';
+      sr.push([name,st.name,st.manager,pr,worked-pr,pct]);
+    });
+  });
+  var ws2=xlsxStyledSheet(sh,sr,['name','text','text','num','num','pct'],
+    {colWidths:[{wch:16},{wch:16},{wch:16},{wch:9},{wch:9},{wch:13}]});
+  XLSX.utils.sheet_add_aoa(ws2,[[exportStamp]],{origin:-1});
+  XLSX.utils.book_append_sheet(wb,ws2,'ملخص الأسبوع');
+
+  // 2) شيت لكل محطة
   sts.forEach(function(st){
     var sd=dataMap[st.name]||{};
     var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
@@ -2127,28 +2252,11 @@ function buildExcelWeek(data,startISO,endISO){
       var pct=worked?Math.round(pr/worked*100)+'%':'-';
       return [name].concat(cells).concat([pr,ab,pct]);
     });
-    var ws=XLSX.utils.aoa_to_sheet([hdr].concat(rows));
-    ws['!cols']=[{wch:16}].concat(days.map(function(){return{wch:14};})).concat([{wch:9},{wch:9},{wch:13}]);
+    var colTypes=['name'].concat(days.map(function(){return 'status';})).concat(['num','num','pct']);
+    var colWidths=[{wch:16}].concat(days.map(function(){return{wch:16};})).concat([{wch:9},{wch:9},{wch:13}]);
+    var ws=xlsxStyledSheet(hdr,rows,colTypes,{colWidths:colWidths});
     XLSX.utils.book_append_sheet(wb,ws,st.name.substring(0,31));
   });
-
-  // شيت ملخص
-  var sh=['الموظف','المحطة','المدير','حاضر','غياب','نسبة الحضور'];
-  var sr=[];
-  sts.forEach(function(st){
-    var sd=dataMap[st.name]||{};
-    var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
-    pp.forEach(function(name){
-      var ed=sd[name]||{};
-      var pr=days.filter(function(d){return(ed[d.iso]||{}).status==='حاضر';}).length;
-      var worked=days.filter(function(d){return ed[d.iso]&&ed[d.iso].status&&ed[d.iso].status!=='-';}).length;
-      var pct=worked?Math.round(pr/worked*100)+'%':'-';
-      sr.push([name,st.name,st.manager,pr,worked-pr,pct]);
-    });
-  });
-  var ws2=XLSX.utils.aoa_to_sheet([sh].concat(sr));
-  ws2['!cols']=[{wch:16},{wch:16},{wch:16},{wch:9},{wch:9},{wch:13}];
-  XLSX.utils.book_append_sheet(wb,ws2,'ملخص الأسبوع');
 
   var p1=startISO.split('-'),p2=endISO.split('-');
   var fname='حضور_اسبوع_'+p1[2]+'-'+p1[1]+' الى '+p2[2]+'-'+p2[1]+'.xlsx';
@@ -2193,30 +2301,10 @@ function buildFullBackupFiles(attendanceAll,stationsAll,linksAll){
   jsonA.style.display='none';
   document.body.appendChild(jsonA);jsonA.click();document.body.removeChild(jsonA);
 
-  // 2) ملف Excel قابل للقراءة البشرية (3 sheets)
+  // 2) ملف Excel قابل للقراءة البشرية (3 sheets، ملخص أولاً)
   var wb=XLSX.utils.book_new();
 
-  // sheet السجلات: نفرد كل موظف في صف لتسهيل الفلترة والمراجعة
-  var attRows=[['التاريخ','الوقت','المحطة','المدير','الموظف','الحالة','ملاحظة']];
-  attendanceAll.forEach(function(r){
-    (r.employees||[]).forEach(function(e){
-      attRows.push([r.report_date||r.report_date_iso,r.report_time||'',r.station||'',r.manager||'',e.name||'',e.status||'',e.note||'']);
-    });
-  });
-  var ws1=XLSX.utils.aoa_to_sheet(attRows);
-  ws1['!cols']=[{wch:12},{wch:9},{wch:18},{wch:16},{wch:16},{wch:9},{wch:20}];
-  XLSX.utils.book_append_sheet(wb,ws1,'كل السجلات');
-
-  // sheet المحطات
-  var stRows=[['اسم المحطة','المدير','عدد الموظفين','كود المدير']];
-  stationsAll.forEach(function(s){
-    stRows.push([s.name||'',s.manager||'',(s.employees||[]).length,s.manager_code||'']);
-  });
-  var ws2=XLSX.utils.aoa_to_sheet(stRows);
-  ws2['!cols']=[{wch:18},{wch:16},{wch:13},{wch:13}];
-  XLSX.utils.book_append_sheet(wb,ws2,'المحطات');
-
-  // sheet ملخص عام
+  // sheet ملخص عام (أولاً)
   var totalReports=attendanceAll.length;
   var totalEmpRecords=attendanceAll.reduce(function(a,r){return a+(r.employees||[]).length;},0);
   var dates=attendanceAll.map(function(r){return r.report_date_iso;}).filter(Boolean).sort();
@@ -2228,9 +2316,28 @@ function buildFullBackupFiles(attendanceAll,stationsAll,linksAll){
     ['أقدم تقرير',dates[0]||'-'],
     ['أحدث تقرير',dates[dates.length-1]||'-']
   ];
-  var ws3=XLSX.utils.aoa_to_sheet(sumRows);
-  ws3['!cols']=[{wch:22},{wch:22}];
+  var ws3=xlsxStyledSheet(['البيان','القيمة'],sumRows,['name','text'],{colWidths:[{wch:24},{wch:24}]});
   XLSX.utils.book_append_sheet(wb,ws3,'ملخص');
+
+  // sheet المحطات
+  var stRows=stationsAll.map(function(s){
+    return [s.name||'',s.manager||'',(s.employees||[]).length,s.manager_code||''];
+  });
+  var ws2b=xlsxStyledSheet(['اسم المحطة','المدير','عدد الموظفين','كود المدير'],stRows,['name','text','num','text'],
+    {colWidths:[{wch:18},{wch:16},{wch:13},{wch:13}]});
+  XLSX.utils.book_append_sheet(wb,ws2b,'المحطات');
+
+  // sheet السجلات: نفرد كل موظف في صف لتسهيل الفلترة والمراجعة، مع تلوين عمود الحالة
+  var attRows=[];
+  attendanceAll.forEach(function(r){
+    (r.employees||[]).forEach(function(e){
+      attRows.push([r.report_date||r.report_date_iso,r.report_time||'',r.station||'',r.manager||'',e.name||'',e.status||'',e.note||'']);
+    });
+  });
+  var ws1=xlsxStyledSheet(['التاريخ','الوقت','المحطة','المدير','الموظف','الحالة','ملاحظة'],attRows,
+    ['text','text','text','text','name','status','text'],
+    {colWidths:[{wch:12},{wch:9},{wch:18},{wch:16},{wch:16},{wch:9},{wch:20}]});
+  XLSX.utils.book_append_sheet(wb,ws1,'كل السجلات');
 
   var wbout=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
   var a=document.createElement('a');
@@ -2467,7 +2574,7 @@ document.getElementById('confirmOkBtn').addEventListener('click',function(){
 });
 
 </script>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>_initApp();</script>
 </body>
