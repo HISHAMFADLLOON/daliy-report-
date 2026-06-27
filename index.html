@@ -894,7 +894,18 @@ function updateManagerLink(s){
     });
   });
 }
-function delStationDB(id){sbDel('stations','id=eq.'+id);}
+function delStationDB(id,stationName,cb){
+  // نحذف الثلاثة معاً: المحطة نفسها + كل سجلات حضورها التاريخية + روابط المدير الخاصة بها
+  var done=0,total=3;
+  function checkDone(){done++;if(done===total&&cb)cb();}
+  sbDel('stations','id=eq.'+id).then(checkDone);
+  if(stationName){
+    sbDel('attendance','station=eq.'+encodeURIComponent(stationName)).then(checkDone);
+    sbDel('manager_links','station_name=eq.'+encodeURIComponent(stationName)).then(checkDone);
+  } else {
+    checkDone();checkDone();
+  }
+}
 
 // ── LOGIN ──
 function isLoggedIn(){return true;}
@@ -1181,11 +1192,24 @@ function addStation(){
 }
 function delStation(id){
   var s=stations.find(function(x){return x.id===id;});
-  confirmModal('حذف المحطة',(s?'حذف "'+s.name+'" وكل بياناتها؟ لا يمكن التراجع.':'حذف المحطة وكل بياناتها؟'),function(){
-    stations=stations.filter(function(s){return s.id!==id;});
-    delStationDB(id); renderSt();
-    if(s)logAudit('حذف محطة',s.name);
-    toast('تم حذف المحطة','ok');
+  if(!s){toast('المحطة غير موجودة','err');return;}
+  // نحسب عدد سجلات الحضور المرتبطة فعلياً قبل عرض رسالة التأكيد
+  sbGet('attendance','station=eq.'+encodeURIComponent(s.name)+'&select=id',function(rows){
+    var recCount=(rows||[]).length;
+    var msg='حذف "'+s.name+'" نهائياً؟<br><br>'+
+      (recCount>0?
+        '<span style="color:var(--red);font-weight:900">سيتم أيضاً حذف '+recCount+' سجل حضور تاريخي</span> تابع لهذه المحطة من قاعدة البيانات بشكل نهائي.':
+        'لا توجد سجلات حضور مرتبطة بهذه المحطة حالياً.')+
+      '<br><br>لا يمكن التراجع عن هذا الإجراء أبداً.';
+    confirmModal('حذف المحطة وكل سجلاتها','',function(){
+      toast('جاري الحذف...','ok');
+      delStationDB(id,s.name,function(){
+        stations=stations.filter(function(x){return x.id!==id;});
+        renderSt();
+        logAudit('حذف محطة وسجلاتها',s.name+' - '+recCount+' سجل حضور');
+        toast('تم حذف المحطة و'+recCount+' سجل بنجاح','ok');
+      });
+    },{okLabel:'حذف نهائياً ('+recCount+' سجل)',extraHtml:msg});
   });
 }
 function toggleSt(id){var el=document.getElementById('sc'+id);if(el)el.classList.toggle('open');}
