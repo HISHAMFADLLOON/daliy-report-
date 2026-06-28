@@ -17,6 +17,12 @@ function toISO(d) {
   return d.toISOString().split('T')[0];
 }
 
+function formatDateEn(d) {
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm}/${d.getFullYear()}`;
+}
+
 async function main() {
   const todayDate = new Date();
   const today = toISO(todayDate);
@@ -70,9 +76,10 @@ async function main() {
     for (let i = 0; i < LOOKBACK_DAYS; i++) {
       cursor.setDate(cursor.getDate() - 1);
       const cIso = toISO(cursor);
-      if (isFriday(cIso)) continue;
+      // أولاً: لو فيه تسجيل في هذا اليوم (حتى لو جمعة)، نوقف العدّ فوراً
       if (dates.has(cIso)) break;
-      streak++;
+      // الجمعة يوم عطلة رسمية، فلا نزيد عداد التأخير لأجلها، لكن نستمر نفحص الأيام السابقة
+      if (!isFriday(cIso)) streak++;
     }
     if (streak >= ESCALATION_DAYS) escalated.push({ ...s, streak });
     else normal.push(s);
@@ -97,7 +104,7 @@ async function main() {
     });
   }
 
-  msg += `\nاليوم: ${todayDate.toLocaleDateString('ar-EG')}`;
+  msg += `\nاليوم: ${formatDateEn(todayDate)}`;
   await sendTelegram(msg.trim());
   console.log(`Sent notification for ${missing.length} missing stations (${escalated.length} escalated)`);
 }
