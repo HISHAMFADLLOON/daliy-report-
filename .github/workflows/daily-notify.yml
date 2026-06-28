@@ -3,7 +3,6 @@ name: Daily Attendance Notification
 on:
   schedule:
     - cron: '40 8 * * *'
-  workflow_dispatch:
 
 jobs:
   notify:
