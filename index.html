@@ -1015,6 +1015,10 @@ function _initApp(){
   } else {
     // لو فيه جلسة محفوظة بالفعل، دخول مباشر بدون طلب باسورد تاني
     if(localStorage.getItem('att_sess')==='1' && localStorage.getItem('att_user')){
+      if(!sessionStorage.getItem('att_auto_logged')){
+        logAudit('دخول (جلسة محفوظة)','الدور: '+(localStorage.getItem('att_role')||'?'));
+        sessionStorage.setItem('att_auto_logged','1');
+      }
       document.getElementById('loginWrap').style.display='none';
       document.getElementById('adminUI').style.display='block';
       initAdmin();
@@ -1069,6 +1073,7 @@ function doLogin(){
       localStorage.setItem('att_sess','1');
       localStorage.setItem('att_user',u);
       localStorage.setItem('att_role',rows[0].role||'supervisor');
+      logAudit('تسجيل دخول','الدور: '+(rows[0].role||'supervisor'));
       document.getElementById('loginWrap').style.display='none';
       document.getElementById('adminUI').style.display='block';
       initAdmin();
