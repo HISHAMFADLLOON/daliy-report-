@@ -461,6 +461,19 @@ select.sel:focus{border-color:var(--blue);}
   border:1.5px solid var(--border);cursor:pointer;background:var(--card);color:var(--text);}
 .diag-goto-btn:active{opacity:.8;}
 
+/* ORPHAN CLEANUP */
+.orphan-card{display:flex;align-items:center;gap:11px;padding:12px 14px;border-radius:13px;
+  border:1.5px solid var(--border);background:var(--card);margin-bottom:8px;cursor:pointer;
+  transition:border-color .15s,background .15s;}
+.orphan-card.checked{border-color:rgba(239,68,68,.4);background:rgba(239,68,68,.06);}
+.orphan-check{width:20px;height:20px;border-radius:6px;border:2px solid var(--border);
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;
+  transition:all .15s;}
+.orphan-card.checked .orphan-check{background:var(--red);border-color:var(--red);color:#fff;}
+.orphan-info{flex:1;min-width:0;}
+.orphan-name{font-size:14px;font-weight:900;}
+.orphan-counts{font-size:11px;color:var(--muted);margin-top:2px;}
+
 /* SKELETON LOADING */
 @keyframes skeleton-pulse{0%,100%{opacity:.55}50%{opacity:1}}
 .sk{background:var(--card);border-radius:8px;animation:skeleton-pulse 1.3s ease-in-out infinite;}
@@ -766,6 +779,24 @@ select.sel:focus{border-color:var(--blue);}
   </div>
 </div>
 
+<!-- ORPHAN DATA CLEANUP MODAL -->
+<div class="ov" id="orphanOv">
+  <div class="modal" style="max-width:420px;max-height:85vh;overflow-y:auto;text-align:right">
+    <div style="text-align:center;font-size:36px;margin-bottom:8px">&#128193;</div>
+    <h3 style="text-align:center;margin-bottom:6px">مراجعة وتنظيف البيانات اليتيمة</h3>
+    <p style="text-align:center;color:var(--muted);font-size:12px;margin-bottom:16px">
+      اختر المحطات التي تريد حذف بياناتها نهائياً، أو اتركها كما هي
+    </p>
+    <div id="orphanList"></div>
+    <div class="modal-foot" style="margin-top:14px">
+      <button class="btn btn-ghost" id="orphanCancelBtn">إغلاق</button>
+      <button class="btn btn-red" id="orphanDeleteBtn" style="background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff" disabled>
+        حذف المحدد (0)
+      </button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1051,6 +1082,10 @@ function initAdmin(){
   document.getElementById('addUserBtn').addEventListener('click',addUser);
   var rdb=document.getElementById('runDiagBtn');
   if(rdb)rdb.addEventListener('click',runDiagnostics);
+  var ocb=document.getElementById('orphanCancelBtn');
+  if(ocb)ocb.addEventListener('click',function(){document.getElementById('orphanOv').classList.remove('open');});
+  var odb=document.getElementById('orphanDeleteBtn');
+  if(odb)odb.addEventListener('click',executeOrphanDelete);
   // قفل تلقائي بعد 30 دقيقة خمول (بدون أي تأثير على باقي وظائف الصفحة)
   setupIdleTimer(function(){
     toast('تم تسجيل الخروج تلقائياً لعدم الاستخدام','warn');
@@ -2709,6 +2744,79 @@ window.toggleUserPassword=function(safeName){
 };
 
 // ── SELF DIAGNOSTICS (منطقي بالكامل، بدون أي AI خارجي) ──
+// ── ORPHAN DATA CLEANUP (مراجعة يدوية محطة بمحطة قبل أي حذف) ──
+var _orphanSelected={};
+function openOrphanCleanup(orphanedStations){
+  _orphanSelected={};
+  var keys=Object.keys(orphanedStations);
+  var el=document.getElementById('orphanList');
+  el.innerHTML=keys.map(function(name){
+    var d=orphanedStations[name];
+    var safeName=name.replace(/'/g,"\\'");
+    return '<div class="orphan-card" id="ocard_'+btoa(unescape(encodeURIComponent(name))).replace(/[^a-zA-Z0-9]/g,'')+'" onclick="toggleOrphanStation(\''+safeName+'\')">'+
+      '<div class="orphan-check">&#10003;</div>'+
+      '<div class="orphan-info">'+
+        '<div class="orphan-name">'+name+'</div>'+
+        '<div class="orphan-counts">'+d.records+' سجل حضور &nbsp;&middot;&nbsp; '+d.links+' رابط مدير</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+  window._orphanData=orphanedStations;
+  updateOrphanDeleteBtn();
+  document.getElementById('orphanOv').classList.add('open');
+}
+function safeIdFromName(name){
+  return btoa(unescape(encodeURIComponent(name))).replace(/[^a-zA-Z0-9]/g,'');
+}
+window.toggleOrphanStation=function(name){
+  var card=document.getElementById('ocard_'+safeIdFromName(name));
+  if(_orphanSelected[name]){
+    delete _orphanSelected[name];
+    if(card)card.classList.remove('checked');
+  } else {
+    _orphanSelected[name]=true;
+    if(card)card.classList.add('checked');
+  }
+  updateOrphanDeleteBtn();
+};
+function updateOrphanDeleteBtn(){
+  var n=Object.keys(_orphanSelected).length;
+  var btn=document.getElementById('orphanDeleteBtn');
+  btn.textContent='حذف المحدد ('+n+')';
+  btn.disabled=n===0;
+}
+function executeOrphanDelete(){
+  var names=Object.keys(_orphanSelected);
+  if(!names.length)return;
+  var data=window._orphanData||{};
+  var totalRec=names.reduce(function(a,n){return a+(data[n]?data[n].records:0);},0);
+  var totalLinks=names.reduce(function(a,n){return a+(data[n]?data[n].links:0);},0);
+  // نغلق مودال المراجعة أولاً قبل فتح مودال التأكيد، لتجنب وجود مودالين مفتوحين في نفس الوقت
+  document.getElementById('orphanOv').classList.remove('open');
+  confirmModal(
+    'تأكيد الحذف النهائي','',
+    function(){
+      toast('جاري الحذف...','ok');
+      var done=0,total=names.length*2;
+      function checkDone(){
+        done++;
+        if(done>=total){
+          toast('تم حذف بيانات '+names.length+' محطة بنجاح','ok');
+          logAudit('تنظيف بيانات يتيمة',names.join('، ')+' - '+totalRec+' سجل، '+totalLinks+' رابط');
+          if(document.getElementById('view-diag').classList.contains('on'))runDiagnostics();
+        }
+      }
+      names.forEach(function(name){
+        sbDel('attendance','station=eq.'+encodeURIComponent(name)).then(checkDone);
+        sbDel('manager_links','station_name=eq.'+encodeURIComponent(name)).then(checkDone);
+      });
+    },
+    {okLabel:'حذف نهائياً ('+totalRec+' سجل، '+totalLinks+' رابط)',
+     extraHtml:'سيتم حذف بيانات <b>'+names.length+' محطة</b> نهائياً:<br>'+
+       '<div style="margin-top:8px;font-size:13px;color:var(--red);font-weight:700">'+names.join('، ')+'</div>'+
+       '<div style="margin-top:8px;font-size:12px;color:var(--muted)">'+totalRec+' سجل حضور و'+totalLinks+' رابط مدير سيُحذفون نهائياً ولا يمكن التراجع.</div>'}
+  );
+}
 function runDiagnostics(){
   var btn=document.getElementById('runDiagBtn');
   var box=document.getElementById('diagBox');
@@ -2810,13 +2918,14 @@ function runDiagnostics(){
             }
           });
 
-          // 3) روابط مدير قديمة لم تُستخدم منذ فترة طويلة (أكثر من 3 أيام بدون استخدام)
+          // 3) روابط مدير قديمة لم تُستخدم منذ فترة طويلة (أكثر من 3 أيام بدون استخدام) - لمحطات موجودة فقط
+          var currentStationNames=(allStations||[]).map(function(s){return s.name;});
           var oldLinksCount=0,oldLinksStations=[];
           (allLinks||[]).forEach(function(l){
-            if(l.created_date&&!l.used_date){
+            if(l.created_date&&!l.used_date&&l.station_name&&currentStationNames.indexOf(l.station_name)!==-1){
               var created=new Date(l.created_date+'T00:00:00');
               var diffDays=Math.floor((new Date(todayISO+'T00:00:00')-created)/86400000);
-              if(diffDays>=3){oldLinksCount++;if(l.station_name)oldLinksStations.push(l.station_name);}
+              if(diffDays>=3){oldLinksCount++;if(oldLinksStations.indexOf(l.station_name)===-1)oldLinksStations.push(l.station_name);}
             }
           });
           if(oldLinksCount>0){
@@ -2826,21 +2935,29 @@ function runDiagnostics(){
               function(){goToTab('tab-links');},'روح لصفحة الروابط');
           }
 
-          // 4) سجلات حضور تابعة لمحطات محذوفة (orphaned records)
+          // 4) بيانات يتيمة (سجلات حضور + روابط مدير) تابعة لمحطات محذوفة من النظام
           var stationNames=(allStations||[]).map(function(s){return s.name;});
-          var orphanedStations={};
+          var orphanedStations={}; // { 'اسم المحطة': {records:N, links:N} }
           (allAttendance||[]).forEach(function(r){
             if(r.station&&stationNames.indexOf(r.station)===-1){
-              orphanedStations[r.station]=(orphanedStations[r.station]||0)+1;
+              if(!orphanedStations[r.station])orphanedStations[r.station]={records:0,links:0};
+              orphanedStations[r.station].records++;
+            }
+          });
+          (allLinks||[]).forEach(function(l){
+            if(l.station_name&&stationNames.indexOf(l.station_name)===-1){
+              if(!orphanedStations[l.station_name])orphanedStations[l.station_name]={records:0,links:0};
+              orphanedStations[l.station_name].links++;
             }
           });
           var orphanKeys=Object.keys(orphanedStations);
           if(orphanKeys.length){
-            var totalOrphan=orphanKeys.reduce(function(a,k){return a+orphanedStations[k];},0);
-            addIssue('warn','&#128193;','سجلات حضور لمحطات محذوفة',
-              'يوجد '+totalOrphan+' سجل حضور تابع لمحطات تم حذفها من النظام ('+orphanKeys.join('، ')+'). البيانات محفوظة لكنها غير مرتبطة بمحطة حالية. الحل: روح لصفحة السجلات، استخدم خانة البحث بالاسم لإيجادها، وقرر بنفسك إن كانت تحتاج حذفاً أم أرشفة فقط (لم نحذفها تلقائياً حفاظاً على بياناتك).',
+            var totalOrphanRec=orphanKeys.reduce(function(a,k){return a+orphanedStations[k].records;},0);
+            var totalOrphanLinks=orphanKeys.reduce(function(a,k){return a+orphanedStations[k].links;},0);
+            addIssue('warn','&#128193;','بيانات يتيمة لمحطات محذوفة',
+              'يوجد '+orphanKeys.length+' محطة محذوفة لها بيانات متبقية: '+totalOrphanRec+' سجل حضور و'+totalOrphanLinks+' رابط مدير ('+orphanKeys.join('، ')+'). البيانات محفوظة بأمان، لم نحذفها تلقائياً. اضغط "مراجعة وتنظيف" لمراجعة كل محطة بالتفصيل واختيار ما تريد حذفه يدوياً.',
               null,null,
-              function(){goToTab('tab-records');},'روح لصفحة السجلات');
+              function(){openOrphanCleanup(orphanedStations);},'مراجعة وتنظيف');
           }
 
           // 5) تكرار اسم موظف أكثر من مرة بنفس المحطة
