@@ -185,6 +185,11 @@ input[type=date]:focus{border-color:var(--blue);}
   padding:5px 12px;font-size:13px;display:flex;align-items:center;gap:6px;}
 .emp-del{color:var(--red);cursor:pointer;font-size:14px;font-weight:900;}
 .emp-edit{color:var(--blue);cursor:pointer;font-size:13px;font-weight:900;}
+.merge-box{background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.2);
+  border-radius:12px;padding:12px 14px;}
+.merge-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+.merge-tag{background:rgba(139,92,246,.15);color:var(--purple);border-radius:8px;
+  padding:3px 9px;font-size:11px;font-weight:700;}
 
 /* LINK CARD */
 .lnk-card{background:var(--grad-card);border:1.5px solid var(--border);border-radius:18px;
@@ -726,6 +731,22 @@ select.sel:focus{border-color:var(--blue);}
   </div>
 </div>
 
+<!-- MERGE MODAL -->
+<div class="ov" id="mergeOv">
+  <div class="modal">
+    <h3>دمج مع محطة تانية</h3>
+    <p id="mergeOvSub" style="margin-bottom:10px"></p>
+    <div class="modal-row">
+      <select id="mergeSelect" class="sel" style="flex:1;min-width:0"></select>
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin-top:8px">هياخد اسم وكود المدير من المحطة الحالية ويطبقهم على المحطة التانية، والمدير هيفضل ظاهر للتسجيل في المحطة الحالية بس.</p>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="closeMergeBtn">الغاء</button>
+      <button class="btn btn-blue" id="confirmMergeBtn">دمج</button>
+    </div>
+  </div>
+</div>
+
 <!-- EDIT REPORT MODAL -->
 <div class="ov" id="editOv">
   <div class="modal">
@@ -930,7 +951,8 @@ function saveStation(s){
   var h=Object.assign({},SBH,{'Prefer':'resolution=merge-duplicates,return=minimal'});
   fetch(SB_URL+'/rest/v1/stations',{method:'POST',headers:h,body:JSON.stringify({
     id:s.id,name:s.name,manager:s.manager,employees:s.employees,
-    manager_code:s.manager_code||'',updated_at:new Date().toISOString()
+    manager_code:s.manager_code||'',manager_group:s.manager_group||null,
+    mgr_visible:s.mgr_visible!==false,updated_at:new Date().toISOString()
   })}).then(function(){updateManagerLink(s);}).catch(function(){});
 }
 function updateManagerLink(s){
@@ -939,7 +961,7 @@ function updateManagerLink(s){
     rows.forEach(function(row){
       fetch(SB_URL+'/rest/v1/manager_links?id=eq.'+encodeURIComponent(row.id),{
         method:'PATCH',headers:h,
-        body:JSON.stringify({employees:s.employees,manager_name:s.manager,manager_code:s.manager_code||''})
+        body:JSON.stringify({employees:s.employees,manager_name:s.manager,manager_code:s.manager_code||'',show_manager:s.mgr_visible!==false})
       }).catch(function(){});
     });
   });
@@ -986,7 +1008,8 @@ function _initApp(){
         stationName:lnk.station_name,
         managerName:lnk.manager_name,
         employees:Array.isArray(lnk.employees)?lnk.employees:[],
-        managerCode:lnk.manager_code||''
+        managerCode:lnk.manager_code||'',
+        showManager:lnk.show_manager!==false
       },shortId);
     });
   } else {
@@ -1261,7 +1284,7 @@ function addStation(){
   var m=document.getElementById('inMgr').value.trim();
   var c=document.getElementById('inCode').value.trim();
   if(!n||!m){toast('ادخل اسم المحطة والمدير','warn');return;}
-  var s={id:Date.now(),name:n,manager:m,employees:[],manager_code:c};
+  var s={id:Date.now(),name:n,manager:m,employees:[],manager_code:c,manager_group:null,mgr_visible:true};
   stations.push(s); saveStation(s); renderSt();
   logAudit('اضافة محطة',n+' - المدير: '+m);
   document.getElementById('inSt').value='';
@@ -1335,6 +1358,7 @@ function renderSt(){
             '<div class="emp-list">'+empHTML+
               '<button class="btn btn-ghost" style="padding:5px 11px;font-size:12px" onclick="window._openEmpOv('+s.id+',\''+s.name.replace(/'/g,"\\'")+'\')">+ موظف</button>'+
             '</div></div>'+
+          '<div style="margin-top:13px">'+mergeBoxHTML(s)+'</div>'+
           '<div style="margin-top:13px">'+
             '<div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:8px">كود المدير السري (اختياري &ndash; بدونه يدخل المدير بدون كود)</div>'+
             '<div class="row">'+
@@ -1404,6 +1428,81 @@ window._editEmp=function(sid,idx){
   });
 };
 
+// ── MERGE / SPLIT STATIONS (مدير واحد لمحطتين) ──
+var activeMergeStId=null;
+function mergeBoxHTML(s){
+  if(!s.manager_group){
+    return '<button class="btn btn-ghost" style="padding:7px 13px;font-size:12px" onclick="window._openMergeSel('+s.id+')">&#128279; دمج مع محطة تانية</button>';
+  }
+  var partners=stations.filter(function(x){return x.manager_group===s.manager_group&&x.id!==s.id;});
+  var visible=s.mgr_visible!==false;
+  var partnerNames=partners.map(function(x){return x.name;}).join('، ')||'—';
+  return '<div class="merge-box">'+
+    '<div class="merge-row">'+
+      '<div><span class="merge-tag">&#128279; مدموجة</span> '+
+        '<span style="font-size:12px;color:var(--muted)">مع: '+partnerNames+'</span></div>'+
+      '<button class="btn btn-red" style="padding:6px 11px;font-size:11px" onclick="window._splitStation('+s.id+')">&#9986; فصل</button>'+
+    '</div>'+
+    '<div style="margin-top:9px;font-size:12px">'+
+      (visible?
+        '<span style="color:var(--green);font-weight:700">&#128100; المدير ظاهر للتسجيل في المحطة دي</span>':
+        '<button class="btn btn-ghost" style="padding:5px 11px;font-size:11px" onclick="window._setPrimaryMgr('+s.id+')">&#128065; اظهار المدير هنا بدل المحطة التانية</button>')+
+    '</div></div>';
+}
+window._openMergeSel=function(sid){
+  var s=stations.find(function(s){return s.id===sid;});
+  if(!s)return;
+  var others=stations.filter(function(x){return x.id!==sid&&x.manager_group!==s.manager_group;});
+  if(!others.length){toast('مفيش محطات تانية متاحة للدمج','warn');return;}
+  activeMergeStId=sid;
+  document.getElementById('mergeOvSub').textContent='دمج محطة "'+s.name+'" مع:';
+  document.getElementById('mergeSelect').innerHTML=others.map(function(x){
+    return '<option value="'+x.id+'">'+x.name+' (المدير الحالي: '+x.manager+')</option>';
+  }).join('');
+  document.getElementById('mergeOv').classList.add('open');
+};
+document.getElementById('closeMergeBtn').addEventListener('click',function(){
+  document.getElementById('mergeOv').classList.remove('open');
+});
+document.getElementById('confirmMergeBtn').addEventListener('click',function(){
+  var sa=stations.find(function(s){return s.id===activeMergeStId;});
+  var targetId=Number(document.getElementById('mergeSelect').value);
+  var sb=stations.find(function(s){return s.id===targetId;});
+  if(!sa||!sb)return;
+  var groupId=sa.manager_group||sb.manager_group||('mg_'+Date.now());
+  sa.manager_group=groupId; sb.manager_group=groupId;
+  sb.manager=sa.manager; sb.manager_code=sa.manager_code;
+  sa.mgr_visible=true; sb.mgr_visible=false;
+  saveStation(sa); saveStation(sb); renderSt();
+  logAudit('دمج محطتين',sa.name+' + '+sb.name+' تحت مدير: '+sa.manager);
+  document.getElementById('mergeOv').classList.remove('open');
+  toast('تم دمج المحطتين','ok');
+});
+window._splitStation=function(sid){
+  var s=stations.find(function(s){return s.id===sid;});
+  if(!s||!s.manager_group)return;
+  var groupId=s.manager_group;
+  var members=stations.filter(function(x){return x.manager_group===groupId;});
+  var names=members.map(function(x){return x.name;}).join('، ');
+  confirmModal('فصل الدمج','هيتفصل الربط بين: '+names+'. كل محطة هتفضل لوحدها بنفس اسم المدير الحالي، وتقدر تغيّره يدوي لاحقاً.',function(){
+    members.forEach(function(x){x.manager_group=null; x.mgr_visible=true; saveStation(x);});
+    renderSt();
+    logAudit('فصل دمج محطات',names);
+    toast('تم فصل المحطات','ok');
+  },{okLabel:'فصل',okBlue:false});
+};
+window._setPrimaryMgr=function(sid){
+  var s=stations.find(function(s){return s.id===sid;});
+  if(!s||!s.manager_group)return;
+  var groupId=s.manager_group;
+  stations.filter(function(x){return x.manager_group===groupId;}).forEach(function(x){
+    x.mgr_visible=(x.id===sid); saveStation(x);
+  });
+  renderSt();
+  logAudit('تغيير ظهور المدير',s.name+' بقت هي اللي يظهر فيها المدير للتسجيل');
+  toast('تم التحديث','ok');
+};
+
 // ── EMPLOYEES ──
 window._openEmpOv=function(id,name){
   activeStId=id;
@@ -1435,7 +1534,7 @@ function saveLinks(){
     sbPost('manager_links',{
       id:s.id+'_'+todayISO,station_name:s.name,manager_name:s.manager,
       employees:s.employees,created_date:todayISO,
-      manager_code:s.manager_code||''
+      manager_code:s.manager_code||'',show_manager:s.mgr_visible!==false
     },'resolution=merge-duplicates,return=minimal');
   });
 }
@@ -1568,7 +1667,8 @@ function showMgrForm(info,lockKey){
   // إيقاف أي idle timer سابق (لو الصفحة دي اتفتحت قبل كده) قبل بدء جديد، لمنع التكرار
   if(mgrIdleDestroy){mgrIdleDestroy();mgrIdleDestroy=null;}
 
-  var people=info.employees.indexOf(info.managerName)!==-1?info.employees:[info.managerName].concat(info.employees);
+  var people=info.showManager===false?info.employees.slice():
+    (info.employees.indexOf(info.managerName)!==-1?info.employees:[info.managerName].concat(info.employees));
   var total=people.length;
   var att={};
   var dateStr=new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
