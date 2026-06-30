@@ -2405,7 +2405,8 @@ var XLSX_COLORS={
   pctGood:'D1FAE5', pctGoodText:'047857',
   pctMid:'FEF3C7', pctMidText:'B45309',
   pctBad:'FEE2E2', pctBadText:'B91C1C',
-  nameBg:'EFF6FF'
+  nameBg:'EFF6FF',
+  roleMgr:'E0E7FF', roleMgrText:'4338CA'
 };
 var XLSX_STATUS_COLOR_MAP={
   'حاضر':['present','presentText'],'راحة':['rest','restText'],'عطلة':['holiday','holidayText'],
@@ -2454,6 +2455,15 @@ function xlsxPctCellStyle(pctText){
 function xlsxNumCellStyle(){
   return {font:{sz:10},alignment:{horizontal:'center',vertical:'center'},border:xlsxThinBorder()};
 }
+function xlsxRoleCellStyle(text){
+  if(text==='مدير'){
+    return {font:{bold:true,color:{rgb:XLSX_COLORS.roleMgrText},sz:10},
+      fill:{patternType:'solid',fgColor:{rgb:XLSX_COLORS.roleMgr}},
+      alignment:{horizontal:'center',vertical:'center'},border:xlsxThinBorder()};
+  }
+  return {font:{sz:10,color:{rgb:XLSX_COLORS.emptyText}},
+    alignment:{horizontal:'center',vertical:'center'},border:xlsxThinBorder()};
+}
 function xlsxTextCellStyle(){
   return {font:{sz:10},alignment:{horizontal:'right',vertical:'center'},border:xlsxThinBorder()};
 }
@@ -2478,6 +2488,7 @@ function xlsxStyledSheet(headerRow,dataRows,colTypes,opts){
       if(type==='name')ws[ref2].s=xlsxNameStyle();
       else if(type==='status')ws[ref2].s=xlsxStatusCellStyle(String(ws[ref2].v||''));
       else if(type==='pct')ws[ref2].s=xlsxPctCellStyle(String(ws[ref2].v||''));
+      else if(type==='role')ws[ref2].s=xlsxRoleCellStyle(String(ws[ref2].v||''));
       else if(type==='text')ws[ref2].s=xlsxTextCellStyle();
       else ws[ref2].s=xlsxNumCellStyle();
     }
@@ -2485,6 +2496,7 @@ function xlsxStyledSheet(headerRow,dataRows,colTypes,opts){
   // ملاحظة: مكتبة xlsx-js-style لا تدعم تجميد الصفوف (freeze panes) فعلياً وقت الكتابة
   if(opts.colWidths)ws['!cols']=opts.colWidths;
   if(opts.rowHeight)ws['!rows']=aoa.map(function(){return {hpt:opts.rowHeight};});
+  if(dataRows.length)ws['!autofilter']={ref:ws['!ref']};
   return ws;
 }
 
@@ -2494,12 +2506,17 @@ function buildExcel(data,dateLabel,isMonth,mode){
   mode=mode||'separate';
   var now=new Date(),y=now.getFullYear(),m=now.getMonth();
   var exportStamp='تاريخ التصدير: '+now.toLocaleString('ar-EG');
+  var dayNames=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
   var days=[];
+  var dayLineStamp='';
   if(isMonth){
     var last=new Date(y,m+1,0).getDate();
     for(var d=1;d<=last;d++){var dd=String(d).padStart(2,'0'),mm=String(m+1).padStart(2,'0');days.push({lbl:dd+'/'+mm,iso:y+'-'+mm+'-'+dd});}
   } else {
-    var iso=dateLabel||todayISO,p=iso.split('-');days.push({lbl:p[2]+'/'+p[1],iso:iso});
+    var iso=dateLabel||todayISO,p=iso.split('-');
+    var dow=dayNames[new Date(iso+'T00:00:00').getDay()];
+    days.push({lbl:dow+' '+p[2]+'/'+p[1],iso:iso});
+    dayLineStamp='اليوم: '+dow+' — التاريخ: '+p[2]+'/'+p[1]+'/'+p[0];
   }
   var dataMap={};
   data.forEach(function(r){
@@ -2514,9 +2531,8 @@ function buildExcel(data,dateLabel,isMonth,mode){
       employees:Array.from(new Set(data.filter(function(r){return r.station===name;}).reduce(function(a,r){return a.concat((r.employees||[]).map(function(e){return e.name;}));},[])))};
   });
   var wb=XLSX.utils.book_new();
-
-  // 1) شيت الملخص أولاً (أهم معلومة في أول صفحة تُفتح)
-  var sh=['الموظف','المحطة','المدير','حاضر','راحة','عطلة','مرضي','اجازة','انقطاع','نسبة الحضور'];
+  wb.Workbook={Views:[{RTL:true}]};
+  var sh=['الموظف','المحطة','الصفة','حاضر','راحة','عطلة','مرضي','اجازة','انقطاع','نسبة الحضور'];
   var sr=[];
   sts.forEach(function(st){
     var sd=dataMap[st.name]||{};
@@ -2526,12 +2542,19 @@ function buildExcel(data,dateLabel,isMonth,mode){
       function cnt(k){return days.filter(function(d){return(ed[d.iso]||{}).status===k;}).length;}
       var pr=cnt('حاضر'),rs=cnt('راحة'),hl=cnt('عطلة'),sk=cnt('مرضي'),vc=cnt('اجازة'),ab=cnt('انقطاع');
       var tt=pr+rs+hl+sk+vc+ab;
-      sr.push([name,st.name,st.manager,pr,rs,hl,sk,vc,ab,tt?Math.round(pr/tt*100)+'%':'-']);
+      sr.push([name,st.name,name===st.manager?'مدير':'موظف',pr,rs,hl,sk,vc,ab,tt?Math.round(pr/tt*100)+'%':'-']);
     });
   });
-  var ws2=xlsxStyledSheet(sh,sr,['name','text','text','num','num','num','num','num','num','pct'],
-    {colWidths:[{wch:16},{wch:16},{wch:16},{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:11},{wch:13}]});
+  if(sr.length){
+    var t0=0,t1=0,t2=0,t3=0,t4=0,t5=0;
+    sr.forEach(function(row){t0+=row[3];t1+=row[4];t2+=row[5];t3+=row[6];t4+=row[7];t5+=row[8];});
+    var tAll=t0+t1+t2+t3+t4+t5;
+    sr.push(['الإجمالي','—','—',t0,t1,t2,t3,t4,t5,tAll?Math.round(t0/tAll*100)+'%':'-']);
+  }
+  var ws2=xlsxStyledSheet(sh,sr,['name','text','role','num','num','num','num','num','num','pct'],
+    {colWidths:[{wch:16},{wch:16},{wch:10},{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:11},{wch:13}]});
   XLSX.utils.sheet_add_aoa(ws2,[[exportStamp]],{origin:-1});
+  if(dayLineStamp)XLSX.utils.sheet_add_aoa(ws2,[[dayLineStamp]],{origin:-1});
   XLSX.utils.book_append_sheet(wb,ws2,'ملخص');
 
   if(mode==='combined'){
@@ -2619,10 +2642,11 @@ function buildExcelWeek(data,startISO,endISO,mode){
   });
 
   var wb=XLSX.utils.book_new();
+  wb.Workbook={Views:[{RTL:true}]};
   var exportStamp='تاريخ التصدير: '+new Date().toLocaleString('ar-EG');
 
   // 1) شيت الملخص أولاً
-  var sh=['الموظف','المحطة','المدير','حاضر','غياب','نسبة الحضور'];
+  var sh=['الموظف','المحطة','الصفة','حاضر','غياب','نسبة الحضور'];
   var sr=[];
   sts.forEach(function(st){
     var sd=dataMap[st.name]||{};
@@ -2632,11 +2656,17 @@ function buildExcelWeek(data,startISO,endISO,mode){
       var pr=days.filter(function(d){return(ed[d.iso]||{}).status==='حاضر';}).length;
       var worked=days.filter(function(d){return ed[d.iso]&&ed[d.iso].status&&ed[d.iso].status!=='-';}).length;
       var pct=worked?Math.round(pr/worked*100)+'%':'-';
-      sr.push([name,st.name,st.manager,pr,worked-pr,pct]);
+      sr.push([name,st.name,name===st.manager?'مدير':'موظف',pr,worked-pr,pct]);
     });
   });
-  var ws2=xlsxStyledSheet(sh,sr,['name','text','text','num','num','pct'],
-    {colWidths:[{wch:16},{wch:16},{wch:16},{wch:9},{wch:9},{wch:13}]});
+  if(sr.length){
+    var wt0=0,wt1=0;
+    sr.forEach(function(row){wt0+=row[3];wt1+=row[4];});
+    var wtAll=wt0+wt1;
+    sr.push(['الإجمالي','—','—',wt0,wt1,wtAll?Math.round(wt0/wtAll*100)+'%':'-']);
+  }
+  var ws2=xlsxStyledSheet(sh,sr,['name','text','role','num','num','pct'],
+    {colWidths:[{wch:16},{wch:16},{wch:10},{wch:9},{wch:9},{wch:13}]});
   XLSX.utils.sheet_add_aoa(ws2,[[exportStamp]],{origin:-1});
   XLSX.utils.book_append_sheet(wb,ws2,'ملخص الأسبوع');
 
@@ -2736,6 +2766,7 @@ function buildFullBackupFiles(attendanceAll,stationsAll,linksAll){
 
   // 2) ملف Excel قابل للقراءة البشرية (3 sheets، ملخص أولاً)
   var wb=XLSX.utils.book_new();
+  wb.Workbook={Views:[{RTL:true}]};
 
   // sheet ملخص عام (أولاً)
   var totalReports=attendanceAll.length;
@@ -2756,6 +2787,10 @@ function buildFullBackupFiles(attendanceAll,stationsAll,linksAll){
   var stRows=stationsAll.map(function(s){
     return [s.name||'',s.manager||'',(s.employees||[]).length,s.manager_code||''];
   });
+  if(stRows.length){
+    var totEmp=stationsAll.reduce(function(a,s){return a+(s.employees||[]).length;},0);
+    stRows.push(['الإجمالي','—',totEmp,'—']);
+  }
   var ws2b=xlsxStyledSheet(['اسم المحطة','المدير','عدد الموظفين','كود المدير'],stRows,['name','text','num','text'],
     {colWidths:[{wch:18},{wch:16},{wch:13},{wch:13}]});
   XLSX.utils.book_append_sheet(wb,ws2b,'المحطات');
