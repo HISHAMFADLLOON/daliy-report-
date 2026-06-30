@@ -812,6 +812,24 @@ function doLogout(){
   location.href = location.pathname;
 }
 
+// ── نظام القفل التلقائي بعد فترة خمول (بدون تأثير على باقي وظائف الموقع) ──
+// onIdle: دالة تُستدعى فور انتهاء مدة الخمول المحددة
+// يعيد دالة destroy() لإيقاف التتبع والتنظيف الكامل عند الحاجة
+function setupIdleTimer(onIdle){
+  var t=null;
+  function reset(){
+    if(t)clearTimeout(t);
+    t=setTimeout(onIdle,IDLE_LIMIT_MS);
+  }
+  var events=['mousedown','keydown','touchstart','scroll','click'];
+  events.forEach(function(ev){document.addEventListener(ev,reset,{passive:true});});
+  reset();
+  return function destroy(){
+    if(t)clearTimeout(t);
+    events.forEach(function(ev){document.removeEventListener(ev,reset);});
+  };
+}
+
 // إلغاء أي Service Worker وكاش قديم متبقي من نسخ سابقة
 if('serviceWorker' in navigator){
   navigator.serviceWorker.getRegistrations().then(function(regs){
@@ -951,13 +969,25 @@ function _initApp(){
       var lb=document.getElementById('loginBtn');
       if(lb) lb.addEventListener('click', doLogin);
       var lp=document.getElementById('lPass');
-      if(lp) lp.addEventListener('keydown', function(e){
-        if(e.key==='Enter') doLogin();
-      });
+      if(lp){
+        lp.addEventListener('keydown', function(e){
+          if(e.key==='Enter') doLogin();
+        });
+        lp.addEventListener('input', function(){
+          var errEl=document.getElementById('lErr');
+          if(errEl)errEl.textContent='';
+        });
+      }
       var lu=document.getElementById('lUser');
-      if(lu) lu.addEventListener('keydown', function(e){
-        if(e.key==='Enter') doLogin();
-      });
+      if(lu){
+        lu.addEventListener('keydown', function(e){
+          if(e.key==='Enter') doLogin();
+        });
+        lu.addEventListener('input', function(){
+          var errEl=document.getElementById('lErr');
+          if(errEl)errEl.textContent='';
+        });
+      }
     }
   }
   }catch(err){
@@ -970,7 +1000,12 @@ function doLogin(){
   try{
   var u=document.getElementById('lUser').value.trim();
   var p=document.getElementById('lPass').value;
-  if(!u||!p){toast('ادخل اسم المستخدم وكلمة المرور','warn');return;}
+  var errEl=document.getElementById('lErr');
+  if(!u||!p){
+    if(errEl)errEl.textContent='ادخل اسم المستخدم وكلمة المرور';
+    return;
+  }
+  if(errEl)errEl.textContent='';
   var btn=document.getElementById('loginBtn');
   btn.textContent='جاري التحقق...';btn.disabled=true;
   sbGet('app_users','username=eq.'+encodeURIComponent(u)+'&password=eq.'+encodeURIComponent(p)+'&select=username,role',function(rows){
@@ -983,8 +1018,9 @@ function doLogin(){
       document.getElementById('adminUI').style.display='block';
       initAdmin();
     } else {
-      document.getElementById('lErr').textContent='اسم المستخدم او كلمة المرور غلط';
+      if(errEl)errEl.textContent='اسم المستخدم او كلمة المرور غلط';
       document.getElementById('lPass').value='';
+      document.getElementById('lPass').focus();
     }
   });
   }catch(err){
@@ -995,6 +1031,8 @@ function doLogin(){
 
 var dashTimer=null;
 var mgrClockTimer=null;
+var idleTimer=null;
+var IDLE_LIMIT_MS=30*60*1000; // 30 دقيقة
 function initAdmin(){
   loadStations(function(){renderSt();loadDash();});
   setupTabs();
@@ -1013,6 +1051,11 @@ function initAdmin(){
   document.getElementById('addUserBtn').addEventListener('click',addUser);
   var rdb=document.getElementById('runDiagBtn');
   if(rdb)rdb.addEventListener('click',runDiagnostics);
+  // قفل تلقائي بعد 30 دقيقة خمول (بدون أي تأثير على باقي وظائف الصفحة)
+  setupIdleTimer(function(){
+    toast('تم تسجيل الخروج تلقائياً لعدم الاستخدام','warn');
+    setTimeout(doLogout,900); // تأخير بسيط عشان الرسالة تظهر قبل التحويل
+  });
   // تحديث تلقائي للداشبورد كل 5 دقائق لو الصفحة مفتوحة
   dashTimer=setInterval(function(){
     var dashView=document.getElementById('view-dash');
@@ -1413,15 +1456,20 @@ function showMgr(info,lockKey){
           '<div class="ip-mgr">المدير: '+info.managerName+'</div>'+
         '</div>'+
         '<div style="margin-bottom:12px;font-size:14px;color:var(--muted)">ادخل الكود السري للمدير للمتابعة</div>'+
-        '<input type="password" id="mgrCodeInput" class="p-note" style="display:block;font-size:15px;padding:13px;margin-bottom:12px" placeholder="الكود السري">'+
+        '<input type="password" id="mgrCodeInput" class="p-note" style="display:block;font-size:15px;padding:13px;margin-bottom:6px" placeholder="الكود السري">'+
+        '<div class="login-err" id="mgrCodeErr"></div>'+
         '<button class="sub-btn" id="mgrCodeBtn">تحقق &#8594;</button>'+
       '</div>';
     document.getElementById('mgrCodeBtn').addEventListener('click',function(){
       var entered=document.getElementById('mgrCodeInput').value.trim();
+      if(!entered){
+        document.getElementById('mgrCodeErr').textContent='ادخل الكود السري اولا';
+        return;
+      }
       if(entered===info.managerCode){
         showMgrForm(info,lockKey);
       } else {
-        toast('الكود غلط','err');
+        document.getElementById('mgrCodeErr').textContent='الكود السري غلط، حاول تاني';
         document.getElementById('mgrCodeInput').value='';
         document.getElementById('mgrCodeInput').focus();
       }
@@ -1429,13 +1477,20 @@ function showMgr(info,lockKey){
     document.getElementById('mgrCodeInput').addEventListener('keydown',function(e){
       if(e.key==='Enter') document.getElementById('mgrCodeBtn').click();
     });
+    document.getElementById('mgrCodeInput').addEventListener('input',function(){
+      document.getElementById('mgrCodeErr').textContent='';
+    });
     setTimeout(function(){document.getElementById('mgrCodeInput').focus();},100);
     return;
   }
   showMgrForm(info,lockKey);
 }
 
+var mgrIdleDestroy=null;
 function showMgrForm(info,lockKey){
+  // إيقاف أي idle timer سابق (لو الصفحة دي اتفتحت قبل كده) قبل بدء جديد، لمنع التكرار
+  if(mgrIdleDestroy){mgrIdleDestroy();mgrIdleDestroy=null;}
+
   var people=info.employees.indexOf(info.managerName)!==-1?info.employees:[info.managerName].concat(info.employees);
   var total=people.length;
   var att={};
@@ -1530,6 +1585,14 @@ function showMgrForm(info,lockKey){
   mgrClockTick();
   mgrClockTimer=setInterval(mgrClockTick,1000);
 
+  // قفل تلقائي بعد 30 دقيقة خمول: يرجع المدير لشاشة الكود السري ويبدأ من جديد
+  mgrIdleDestroy=setupIdleTimer(function(){
+    if(mgrClockTimer){clearInterval(mgrClockTimer);mgrClockTimer=null;}
+    if(mgrIdleDestroy){mgrIdleDestroy();mgrIdleDestroy=null;}
+    toast('تم قفل الصفحة لعدم الاستخدام، ادخل الكود تاني','warn');
+    showMgr(info,lockKey);
+  });
+
   document.getElementById('subBtn').addEventListener('click',function(){
     var missing=people.filter(function(n){return !att[n];});
     if(missing.length){
@@ -1588,8 +1651,16 @@ function showMgrForm(info,lockKey){
       var btn=document.getElementById('confirmBtn');
       btn.disabled=true;btn.textContent='جاري الارسال...';
       var now=new Date();
-      var date=now.toLocaleDateString('ar-EG');
-      var time=now.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+      // تنسيق يدوي بأرقام إنجليزية عادية (dd/mm/yyyy و hh:mm) بدون استخدام toLocaleDateString('ar-EG')
+      // لأنها تُدخل أرقاماً عربية هندية ورموز اتجاه (RTL marks) خفية تُخرّب عرض النص في تيليجرام وأماكن أخرى
+      var dd=String(now.getDate()).padStart(2,'0');
+      var mm=String(now.getMonth()+1).padStart(2,'0');
+      var yyyy=now.getFullYear();
+      var date=dd+'/'+mm+'/'+yyyy;
+      var hh24=now.getHours();
+      var ampm=hh24>=12?'م':'ص';
+      var hh12=hh24%12;if(hh12===0)hh12=12;
+      var time=String(hh12).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+' '+ampm;
       var emps=people.map(function(n){
         var ne=document.getElementById('pn_'+CSS.escape(n));
         return {name:n,status:att[n],note:(ne&&att[n]!=='حاضر')?ne.value.trim():''};
@@ -1624,6 +1695,9 @@ function showMgrForm(info,lockKey){
           body:JSON.stringify({chat_id:CHAT_ID,text:msg})
         }).catch(function(){});
         sbPatch('manager_links','id=eq.'+encodeURIComponent(lockKey),{used_date:todayISO});
+        // الرابط أصبح مقفولاً بنجاح، فلا حاجة لاستمرار تتبع الخمول أو الساعة الحية بعد هذه النقطة
+        if(mgrClockTimer){clearInterval(mgrClockTimer);mgrClockTimer=null;}
+        if(mgrIdleDestroy){mgrIdleDestroy();mgrIdleDestroy=null;}
         document.getElementById('mgrBody').innerHTML=
           '<div class="cs"><div class="cs-icon">&#10003;</div>'+
           '<div class="cs-title">تم ارسال التقرير</div>'+
