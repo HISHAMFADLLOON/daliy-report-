@@ -184,6 +184,7 @@ input[type=date]:focus{border-color:var(--blue);}
 .emp-tag{background:var(--bg);border:1.5px solid var(--border);border-radius:20px;
   padding:5px 12px;font-size:13px;display:flex;align-items:center;gap:6px;}
 .emp-del{color:var(--red);cursor:pointer;font-size:14px;font-weight:900;}
+.emp-edit{color:var(--blue);cursor:pointer;font-size:13px;font-weight:900;}
 
 /* LINK CARD */
 .lnk-card{background:var(--grad-card);border:1.5px solid var(--border);border-radius:18px;
@@ -1310,7 +1311,9 @@ function renderSt(){
         '<div style="font-size:11px;color:var(--green);font-weight:700;margin-top:2px">&#128337; آخر تسجيل: '+last+'</div>':
         '<div style="font-size:11px;color:var(--muted);margin-top:2px">لم يسجّل بعد</div>';
       var empHTML=s.employees.map(function(e,i){
-        return '<div class="emp-tag">'+e+'<span class="emp-del" onclick="window._delEmp('+s.id+','+i+')">&#10005;</span></div>';
+        return '<div class="emp-tag">'+e+
+          '<span class="emp-edit" onclick="window._editEmp('+s.id+','+i+')">&#9998;</span>'+
+          '<span class="emp-del" onclick="window._delEmp('+s.id+','+i+')">&#10005;</span></div>';
       }).join('');
       return '<div class="st-card" id="sc'+s.id+'">'+
         '<div class="st-hdr" onclick="window._toggleSt('+s.id+')">'+
@@ -1326,7 +1329,7 @@ function renderSt(){
           '<div class="mgr-badge">'+
             '<div><div style="font-size:11px;color:var(--muted);margin-bottom:2px">المدير</div>'+
             '<div class="mgr-nm">'+s.manager+'</div></div>'+
-            '<div style="font-size:12px;color:var(--muted)">'+s.name+'</div></div>'+
+            '<button class="btn btn-ghost" style="padding:6px 12px;font-size:12px" onclick="event.stopPropagation();window._editMgr('+s.id+')">&#9998; تعديل</button></div>'+
           '<div style="margin-top:13px">'+
             '<div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:8px">الموظفون ('+s.employees.length+')</div>'+
             '<div class="emp-list">'+empHTML+
@@ -1360,6 +1363,45 @@ window._delEmp=function(sid,idx){
   var name=s.employees[idx];
   s.employees.splice(idx,1); saveStation(s); renderSt();
   logAudit('حذف موظف',name+' - محطة: '+s.name);
+};
+window._editMgr=function(sid){
+  var s=stations.find(function(s){return s.id===sid;});
+  if(!s)return;
+  var oldName=s.manager;
+  confirmModal('تعديل اسم المدير','',function(){
+    var input=document.getElementById('editMgrInput');
+    var val=input?input.value.trim():'';
+    if(!val){toast('اكتب اسم المدير','warn');return;}
+    if(val===oldName)return;
+    s.manager=val;
+    saveStation(s); renderSt();
+    logAudit('تعديل اسم المدير',s.name+': '+oldName+' &larr; '+val);
+    toast('تم تعديل اسم المدير','ok');
+  },{
+    okLabel:'حفظ',okBlue:true,focusId:'editMgrInput',
+    extraHtml:'<input type="text" id="editMgrInput" class="login-input" style="margin-top:10px;text-align:center" value="'+
+      oldName.replace(/"/g,'&quot;')+'" placeholder="اسم المدير">'
+  });
+};
+window._editEmp=function(sid,idx){
+  var s=stations.find(function(s){return s.id===sid;});
+  if(!s)return;
+  var oldName=s.employees[idx];
+  confirmModal('تعديل اسم الموظف','',function(){
+    var input=document.getElementById('editEmpInput');
+    var val=input?input.value.trim():'';
+    if(!val){toast('اكتب اسم الموظف','warn');return;}
+    if(val===oldName)return;
+    if(s.employees.indexOf(val)!==-1){toast('الاسم موجود بالفعل','warn');return;}
+    s.employees[idx]=val;
+    saveStation(s); renderSt();
+    logAudit('تعديل اسم موظف',s.name+': '+oldName+' &larr; '+val);
+    toast('تم تعديل اسم الموظف','ok');
+  },{
+    okLabel:'حفظ',okBlue:true,focusId:'editEmpInput',
+    extraHtml:'<input type="text" id="editEmpInput" class="login-input" style="margin-top:10px;text-align:center" value="'+
+      oldName.replace(/"/g,'&quot;')+'" placeholder="اسم الموظف">'
+  });
 };
 
 // ── EMPLOYEES ──
@@ -3177,8 +3219,24 @@ function confirmModal(title,msg,onConfirm,opts){
     document.getElementById('confirmMsg').textContent=msg||'';
   }
   document.getElementById('confirmOkBtn').textContent=opts.okLabel||'تأكيد الحذف';
+  var okBtn=document.getElementById('confirmOkBtn');
+  if(opts.okBlue){
+    okBtn.className='btn btn-blue';
+    okBtn.style.background='';
+    okBtn.style.color='';
+  } else {
+    okBtn.className='btn btn-red';
+    okBtn.style.background='linear-gradient(135deg,#ef4444,#dc2626)';
+    okBtn.style.color='#fff';
+  }
   _confirmCb=onConfirm;
   document.getElementById('confirmOv').classList.add('open');
+  if(opts.focusId){
+    setTimeout(function(){
+      var f=document.getElementById(opts.focusId);
+      if(f){f.focus();f.select&&f.select();}
+    },150);
+  }
 }
 document.getElementById('confirmCancelBtn').addEventListener('click',function(){
   document.getElementById('confirmOv').classList.remove('open');
