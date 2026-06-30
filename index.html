@@ -1452,7 +1452,7 @@ function mergeBoxHTML(s){
 window._openMergeSel=function(sid){
   var s=stations.find(function(s){return s.id===sid;});
   if(!s)return;
-  var others=stations.filter(function(x){return x.id!==sid&&x.manager_group!==s.manager_group;});
+  var others=stations.filter(function(x){return x.id!==sid&&(!s.manager_group||x.manager_group!==s.manager_group);});
   if(!others.length){toast('مفيش محطات تانية متاحة للدمج','warn');return;}
   activeMergeStId=sid;
   document.getElementById('mergeOvSub').textContent='دمج محطة "'+s.name+'" مع:';
