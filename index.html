@@ -658,6 +658,9 @@ select.sel:focus{border-color:var(--blue);}
       </select>
       <button class="btn btn-blue" id="addUserBtn" style="flex:0 0 auto">&#10010; إضافة</button>
     </div>
+    <p style="font-size:11px;color:var(--muted);margin:-4px 0 12px">
+      &#8505; سجل التدقيق وإدارة المستخدمين والتشخيص الذاتي متاحة لحساب "hisham" فقط، أياً كان الدور المختار هنا.
+    </p>
 
     <div class="sec">المستخدمون الحاليون</div>
     <div id="usersList"><div class="loading">&#9203; جاري التحميل...</div></div>
@@ -869,17 +872,29 @@ function doLogout(){
 // onIdle: دالة تُستدعى فور انتهاء مدة الخمول المحددة
 // يعيد دالة destroy() لإيقاف التتبع والتنظيف الكامل عند الحاجة
 function setupIdleTimer(onIdle){
-  var t=null;
-  function reset(){
-    if(t)clearTimeout(t);
-    t=setTimeout(onIdle,IDLE_LIMIT_MS);
+  var last=Date.now();
+  var fired=false;
+  function reset(){ last=Date.now(); }
+  function check(){
+    if(fired)return;
+    if(Date.now()-last>=IDLE_LIMIT_MS){
+      fired=true;
+      onIdle();
+    }
   }
   var events=['mousedown','keydown','touchstart','scroll','click'];
-  events.forEach(function(ev){document.addEventListener(ev,reset,{passive:true});});
-  reset();
+  events.forEach(function(ev){document.addEventListener(ev,reset,{passive:true,capture:true});});
+  // فحص دوري كل 15 ثانية بدل الاعتماد على مؤقت واحد طويل
+  // (المتصفحات بتجمّد أو تبطّئ المؤقتات في التابات الخلفية، فمؤقت طويل واحد ممكن ما يتفعّلش في وقته)
+  var iv=setInterval(check,15000);
+  // فحص فوري لما التاب يرجع مرئي، عشان لو كان متجمد في الخلفية وعدّى وقت الخمول أثناء ده
+  function onVis(){ if(document.visibilityState==='visible')check(); }
+  document.addEventListener('visibilitychange',onVis);
   return function destroy(){
-    if(t)clearTimeout(t);
-    events.forEach(function(ev){document.removeEventListener(ev,reset);});
+    fired=true;
+    clearInterval(iv);
+    events.forEach(function(ev){document.removeEventListener(ev,reset,{capture:true});});
+    document.removeEventListener('visibilitychange',onVis);
   };
 }
 
@@ -1097,11 +1112,12 @@ function initAdmin(){
   loadStations(function(){renderSt();loadDash();});
   setupTabs();
   setupRecordsBtns();
-  if(localStorage.getItem('att_role')!=='admin'){
+  // سجل التدقيق، إدارة المستخدمين، والتشخيص الذاتي: حصراً لحساب hisham فقط
+  // (حتى لو عملت يوزر تاني بدور admin، مش هيشوف الصفحات دي)
+  if(localStorage.getItem('att_user')!=='hisham'){
     var ab=document.getElementById('auditBtn');
     if(ab)ab.style.display='none';
   }
-  // صفحة إدارة المستخدمين وصفحة التشخيص الذاتي تظهران فقط لحساب hisham الرئيسي
   if(localStorage.getItem('att_user')==='hisham'){
     var ut=document.getElementById('tab-users');
     if(ut)ut.style.display='';
@@ -2837,7 +2853,7 @@ function renderUsers(users){
   var myUser=localStorage.getItem('att_user');
   el.innerHTML=users.map(function(u){
     var initial=u.username.charAt(0).toUpperCase();
-    var roleLabel=u.role==='admin'?'أدمن - صلاحيات كاملة':'مشرف - بدون سجل التدقيق';
+    var roleLabel=u.role==='admin'?'أدمن':'مشرف';
     var isSelf=u.username===myUser;
     var safeName=u.username.replace(/'/g,"\\'");
     var safePass=(u.password||'').replace(/'/g,"\\'").replace(/</g,'&lt;');
