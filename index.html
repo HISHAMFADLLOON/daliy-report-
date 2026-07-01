@@ -618,6 +618,7 @@ select.sel:focus{border-color:var(--blue);}
       <button class="btn btn-ghost" id="expPdfBtn">&#128209; PDF اليوم</button>
       <button class="btn btn-ghost" id="copyRptBtn">&#128203; نسخ للواتساب</button>
       <button class="btn btn-ghost" style="grid-column:1/-1" id="auditBtn">&#128203; سجل التدقيق</button>
+      <button class="btn btn-ghost" style="grid-column:1/-1;display:none" id="loginLogBtn">&#128273; سجل تسجيلات الدخول</button>
       <button class="btn btn-red btn-del" id="delAllBtn">&#128465; حذف السجلات المعروضة</button>
     </div>
     <button class="btn btn-ghost" id="fullBackupBtn" style="width:100%;margin-bottom:14px;border-color:rgba(59,130,246,.25)">
@@ -659,7 +660,7 @@ select.sel:focus{border-color:var(--blue);}
       <button class="btn btn-blue" id="addUserBtn" style="flex:0 0 auto">&#10010; إضافة</button>
     </div>
     <p style="font-size:11px;color:var(--muted);margin:-4px 0 12px">
-      &#8505; سجل التدقيق وإدارة المستخدمين والتشخيص الذاتي متاحة لحساب "hisham" فقط، أياً كان الدور المختار هنا.
+      &#8505; دور "أدمن" بيدي صلاحية رؤية سجل التدقيق. سجل تسجيلات الدخول وإدارة المستخدمين والتشخيص الذاتي متاحة لحساب "hisham" فقط.
     </p>
 
     <div class="sec">المستخدمون الحاليون</div>
@@ -767,10 +768,23 @@ select.sel:focus{border-color:var(--blue);}
 <div class="ov" id="auditOv">
   <div class="modal" style="max-width:420px">
     <h3>&#128203; سجل التدقيق</h3>
-    <p>آخر 50 عملية في النظام</p>
+    <p>آخر العمليات في النظام</p>
     <div id="auditRows" style="max-height:60vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+    <button class="btn btn-ghost btn-full" id="auditLoadMoreBtn" style="margin-top:10px">تحميل المزيد</button>
     <div class="modal-foot">
       <button class="btn btn-ghost" id="closeAuditBtn">اغلاق</button>
+    </div>
+  </div>
+</div>
+
+<div class="ov" id="loginLogOv">
+  <div class="modal" style="max-width:420px">
+    <h3>&#128273; سجل تسجيلات الدخول</h3>
+    <p>مين دخل النظام وإمتى</p>
+    <div id="loginLogRows" style="max-height:60vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+    <button class="btn btn-ghost btn-full" id="loginLogLoadMoreBtn" style="margin-top:10px">تحميل المزيد</button>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="closeLoginLogBtn">اغلاق</button>
     </div>
   </div>
 </div>
@@ -1031,7 +1045,7 @@ function _initApp(){
     // لو فيه جلسة محفوظة بالفعل، دخول مباشر بدون طلب باسورد تاني
     if(localStorage.getItem('att_sess')==='1' && localStorage.getItem('att_user')){
       if(!sessionStorage.getItem('att_auto_logged')){
-        logAudit('دخول (جلسة محفوظة)','الدور: '+(localStorage.getItem('att_role')||'?'));
+        logAudit('دخول تلقائي بجلسة محفوظة','الدور: '+(localStorage.getItem('att_role')||'?'));
         sessionStorage.setItem('att_auto_logged','1');
       }
       document.getElementById('loginWrap').style.display='none';
@@ -1112,13 +1126,15 @@ function initAdmin(){
   loadStations(function(){renderSt();loadDash();});
   setupTabs();
   setupRecordsBtns();
-  // سجل التدقيق، إدارة المستخدمين، والتشخيص الذاتي: حصراً لحساب hisham فقط
-  // (حتى لو عملت يوزر تاني بدور admin، مش هيشوف الصفحات دي)
-  if(localStorage.getItem('att_user')!=='hisham'){
+  // سجل التدقيق: متاح لأي حساب دوره admin
+  if(localStorage.getItem('att_role')!=='admin'){
     var ab=document.getElementById('auditBtn');
     if(ab)ab.style.display='none';
   }
+  // سجل تسجيلات الدخول، إدارة المستخدمين، والتشخيص الذاتي: حصراً لحساب hisham فقط
   if(localStorage.getItem('att_user')==='hisham'){
+    var llb=document.getElementById('loginLogBtn');
+    if(llb)llb.style.display='block';
     var ut=document.getElementById('tab-users');
     if(ut)ut.style.display='';
     var dt=document.getElementById('tab-diag');
@@ -2224,24 +2240,98 @@ function copyReport(data,dateLabel){
   } else fbCopy(txt);
 }
 
+var AUDIT_PAGE_SIZE=50;
+var auditOffset=0;
+var auditAllLoaded=false;
+var LOGIN_ACTIONS=['تسجيل دخول','دخول تلقائي بجلسة محفوظة'];
+function auditRowHTML(r){
+  var dt=new Date(r.created_at).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'});
+  return '<div class="edit-row" style="flex-direction:column;align-items:stretch;gap:4px">'+
+    '<div style="display:flex;justify-content:space-between;gap:8px">'+
+      '<span class="edit-name">'+(r.username||'?')+' &ndash; '+r.action+'</span>'+
+      '<span style="font-size:11px;color:var(--muted);white-space:nowrap">'+dt+'</span>'+
+    '</div>'+
+    (r.details?'<div style="font-size:12px;color:var(--muted)">'+r.details+'</div>':'')+
+  '</div>';
+}
+function auditExcludeLoginFilter(){
+  return LOGIN_ACTIONS.map(function(a){return 'action=neq.'+encodeURIComponent(a);}).join('&');
+}
 function openAuditLog(){
   document.getElementById('auditOv').classList.add('open');
   var el=document.getElementById('auditRows');
   el.innerHTML='<div class="loading">&#9203; جاري التحميل...</div>';
-  sbGet('audit_log','select=*&order=created_at.desc&limit=50',function(rows){
-    if(!rows||!rows.length){el.innerHTML='<div class="empty"><div class="ei">&#128203;</div><p>لا توجد عمليات مسجلة بعد</p></div>';return;}
-    el.innerHTML=rows.map(function(r){
-      var dt=new Date(r.created_at).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'});
-      return '<div class="edit-row" style="flex-direction:column;align-items:stretch;gap:4px">'+
-        '<div style="display:flex;justify-content:space-between;gap:8px">'+
-          '<span class="edit-name">'+(r.username||'?')+' &ndash; '+r.action+'</span>'+
-          '<span style="font-size:11px;color:var(--muted);white-space:nowrap">'+dt+'</span>'+
-        '</div>'+
-        (r.details?'<div style="font-size:12px;color:var(--muted)">'+r.details+'</div>':'')+
-      '</div>';
-    }).join('');
+  auditOffset=0; auditAllLoaded=false;
+  var moreBtn=document.getElementById('auditLoadMoreBtn');
+  moreBtn.style.display='none';
+  sbGet('audit_log','select=*&'+auditExcludeLoginFilter()+'&order=created_at.desc&limit='+AUDIT_PAGE_SIZE,function(rows){
+    rows=rows||[];
+    if(!rows.length){el.innerHTML='<div class="empty"><div class="ei">&#128203;</div><p>لا توجد عمليات مسجلة بعد</p></div>';return;}
+    el.innerHTML=rows.map(auditRowHTML).join('');
+    auditOffset=rows.length;
+    if(rows.length<AUDIT_PAGE_SIZE){auditAllLoaded=true;}
+    else{moreBtn.style.display='block';moreBtn.textContent='تحميل المزيد';}
   });
 }
+function loadMoreAudit(){
+  if(auditAllLoaded)return;
+  var moreBtn=document.getElementById('auditLoadMoreBtn');
+  moreBtn.disabled=true;moreBtn.textContent='جاري التحميل...';
+  sbGet('audit_log','select=*&'+auditExcludeLoginFilter()+'&order=created_at.desc&limit='+AUDIT_PAGE_SIZE+'&offset='+auditOffset,function(rows){
+    rows=rows||[];
+    moreBtn.disabled=false;
+    var el=document.getElementById('auditRows');
+    if(!rows.length){auditAllLoaded=true;moreBtn.style.display='none';return;}
+    el.insertAdjacentHTML('beforeend',rows.map(auditRowHTML).join(''));
+    auditOffset+=rows.length;
+    if(rows.length<AUDIT_PAGE_SIZE){auditAllLoaded=true;moreBtn.style.display='none';}
+    else{moreBtn.textContent='تحميل المزيد';}
+  });
+}
+document.getElementById('auditLoadMoreBtn').addEventListener('click',loadMoreAudit);
+
+// ── LOGIN LOG (hisham only) ──
+var loginLogOffset=0;
+var loginLogAllLoaded=false;
+function loginLogFilter(){
+  return 'action=in.('+LOGIN_ACTIONS.map(encodeURIComponent).join(',')+')';
+}
+function openLoginLog(){
+  document.getElementById('loginLogOv').classList.add('open');
+  var el=document.getElementById('loginLogRows');
+  el.innerHTML='<div class="loading">&#9203; جاري التحميل...</div>';
+  loginLogOffset=0; loginLogAllLoaded=false;
+  var moreBtn=document.getElementById('loginLogLoadMoreBtn');
+  moreBtn.style.display='none';
+  sbGet('audit_log','select=*&'+loginLogFilter()+'&order=created_at.desc&limit='+AUDIT_PAGE_SIZE,function(rows){
+    rows=rows||[];
+    if(!rows.length){el.innerHTML='<div class="empty"><div class="ei">&#128273;</div><p>لا توجد تسجيلات دخول بعد</p></div>';return;}
+    el.innerHTML=rows.map(auditRowHTML).join('');
+    loginLogOffset=rows.length;
+    if(rows.length<AUDIT_PAGE_SIZE){loginLogAllLoaded=true;}
+    else{moreBtn.style.display='block';moreBtn.textContent='تحميل المزيد';}
+  });
+}
+function loadMoreLoginLog(){
+  if(loginLogAllLoaded)return;
+  var moreBtn=document.getElementById('loginLogLoadMoreBtn');
+  moreBtn.disabled=true;moreBtn.textContent='جاري التحميل...';
+  sbGet('audit_log','select=*&'+loginLogFilter()+'&order=created_at.desc&limit='+AUDIT_PAGE_SIZE+'&offset='+loginLogOffset,function(rows){
+    rows=rows||[];
+    moreBtn.disabled=false;
+    var el=document.getElementById('loginLogRows');
+    if(!rows.length){loginLogAllLoaded=true;moreBtn.style.display='none';return;}
+    el.insertAdjacentHTML('beforeend',rows.map(auditRowHTML).join(''));
+    loginLogOffset+=rows.length;
+    if(rows.length<AUDIT_PAGE_SIZE){loginLogAllLoaded=true;moreBtn.style.display='none';}
+    else{moreBtn.textContent='تحميل المزيد';}
+  });
+}
+document.getElementById('loginLogLoadMoreBtn').addEventListener('click',loadMoreLoginLog);
+document.getElementById('loginLogBtn').addEventListener('click',openLoginLog);
+document.getElementById('closeLoginLogBtn').addEventListener('click',function(){
+  document.getElementById('loginLogOv').classList.remove('open');
+});
 var lastLoadedDate=null;
 function loadToday(){document.getElementById('dateInput').value=todayISO;lastLoadedDate=null;loadByDate();}
 function loadByDate(){
@@ -2853,7 +2943,7 @@ function renderUsers(users){
   var myUser=localStorage.getItem('att_user');
   el.innerHTML=users.map(function(u){
     var initial=u.username.charAt(0).toUpperCase();
-    var roleLabel=u.role==='admin'?'أدمن':'مشرف';
+    var roleLabel=u.role==='admin'?'أدمن - يشوف سجل التدقيق':'مشرف - بدون سجل التدقيق';
     var isSelf=u.username===myUser;
     var safeName=u.username.replace(/'/g,"\\'");
     var safePass=(u.password||'').replace(/'/g,"\\'").replace(/</g,'&lt;');
