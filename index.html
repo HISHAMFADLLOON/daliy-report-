@@ -624,6 +624,9 @@ select.sel:focus{border-color:var(--blue);}
     <button class="btn btn-ghost" id="fullBackupBtn" style="width:100%;margin-bottom:14px;border-color:rgba(59,130,246,.25)">
       &#128190; نسخة احتياطية شاملة (كل البيانات)
     </button>
+    <button class="btn btn-red" id="emptyAttendanceBtn" style="width:100%;margin-bottom:14px;display:none">
+      &#128465; تفريغ سجلات الحضور بالكامل (توفير مساحة القاعدة)
+    </button>
     <!-- منطقة المقارنة -->
     <div id="cmpBox" style="display:none"></div>
     <div id="recList"></div>
@@ -1143,10 +1146,12 @@ function initAdmin(){
     var ab=document.getElementById('auditBtn');
     if(ab)ab.style.display='none';
   }
-  // سجل تسجيلات الدخول، إدارة المستخدمين، والتشخيص الذاتي: حصراً لحساب hisham فقط
+  // سجل تسجيلات الدخول، إدارة المستخدمين، والتشخيص الذاتي، وتفريغ الحضور: حصراً لحساب hisham فقط
   if(localStorage.getItem('att_user')==='hisham'){
     var llb=document.getElementById('loginLogBtn');
     if(llb)llb.style.display='block';
+    var eab=document.getElementById('emptyAttendanceBtn');
+    if(eab)eab.style.display='block';
     var ut=document.getElementById('tab-users');
     if(ut)ut.style.display='';
     var dt=document.getElementById('tab-diag');
@@ -1940,6 +1945,8 @@ function showMgrForm(info,lockKey){
 // ── RECORDS ──
 function setupRecordsBtns(){
   document.getElementById('fullBackupBtn').addEventListener('click',fullBackup);
+  var eab=document.getElementById('emptyAttendanceBtn');
+  if(eab)eab.addEventListener('click',startEmptyAttendance);
   document.getElementById('searchBtn').addEventListener('click',function(){
     document.getElementById('cmpBox').style.display='none';
     loadByDate();
@@ -2866,6 +2873,60 @@ function fullBackup(){
         if(btn){btn.disabled=false;btn.innerHTML='&#128190; نسخة احتياطية شاملة (كل البيانات)';}
       });
     });
+  });
+}
+
+// ── تفريغ جدول الحضور بالكامل (توفير مساحة، بدون أي تأثير على المحطات/المستخدمين/الإعدادات) ──
+function startEmptyAttendance(){
+  var btn=document.getElementById('emptyAttendanceBtn');
+  btn.disabled=true;btn.innerHTML='&#9203; جاري العد...';
+  sbGet('attendance','select=id&limit=100000',function(rows){
+    btn.disabled=false;btn.innerHTML='&#128465; تفريغ سجلات الحضور بالكامل (توفير مساحة القاعدة)';
+    var count=(rows||[]).length;
+    if(!count){toast('جدول الحضور فارغ بالفعل','ok');return;}
+    confirmModal(
+      'تفريغ سجلات الحضور بالكامل',
+      'هيتم حذف <b>'+count+' سجل حضور</b> نهائياً من كل المحطات والتواريخ. المحطات والموظفين والمستخدمين مش هيتأثروا.<br><br>'+
+      '&#9888;&#65039; العملية دي <b>لا يمكن التراجع عنها</b>. لو محتاج البيانات دي لاحقاً، خد نسخة احتياطية شاملة الأول.<br><br>'+
+      'اكتب كلمة <b>"تفريغ"</b> بالضبط في المربع تحت للتأكيد:',
+      function(){
+        var confirmInput=document.getElementById('emptyConfirmInput');
+        if(!confirmInput||confirmInput.value.trim()!=='تفريغ'){
+          toast('لازم تكتب كلمة "تفريغ" بالضبط للتأكيد','warn');return;
+        }
+        executeEmptyAttendance(count);
+      },
+      {okLabel:'تفريغ نهائياً',okBlue:false,focusId:'emptyConfirmInput',
+        extraHtml:'<input type="text" id="emptyConfirmInput" class="login-input" style="margin-top:10px;text-align:center" placeholder="اكتب: تفريغ" autocomplete="off">'}
+    );
+  });
+}
+function executeEmptyAttendance(count){
+  var btn=document.getElementById('emptyAttendanceBtn');
+  btn.disabled=true;btn.innerHTML='&#9203; جاري التفريغ... 0%';
+  sbGet('attendance','select=id&limit=100000',function(rows){
+    rows=rows||[];
+    var total=rows.length;
+    if(!total){btn.disabled=false;btn.innerHTML='&#128465; تفريغ سجلات الحضور بالكامل (توفير مساحة القاعدة)';toast('جدول الحضور فارغ بالفعل','ok');return;}
+    var batchSize=200;
+    var done=0;
+    function nextBatch(i){
+      if(i>=total){
+        btn.disabled=false;btn.innerHTML='&#128465; تفريغ سجلات الحضور بالكامل (توفير مساحة القاعدة)';
+        logAudit('تفريغ سجلات الحضور',done+' سجل تم حذفه نهائياً');
+        toast('تم تفريغ '+done+' سجل حضور بنجاح','ok');
+        loadByDate();
+        return;
+      }
+      var batch=rows.slice(i,i+batchSize);
+      var ids=batch.map(function(r){return r.id;}).join(',');
+      sbDel('attendance','id=in.('+ids+')').then(function(ok){
+        if(ok)done+=batch.length;
+        btn.innerHTML='&#9203; جاري التفريغ... '+Math.round((i+batch.length)/total*100)+'%';
+        nextBatch(i+batchSize);
+      });
+    }
+    nextBatch(0);
   });
 }
 function buildFullBackupFiles(attendanceAll,stationsAll,linksAll){
