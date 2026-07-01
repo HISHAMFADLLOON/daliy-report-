@@ -949,6 +949,18 @@ function sbGet(table,q,cb){
     .then(function(r){return r.ok?r.json():[];})
     .then(cb).catch(function(){cb([]);});
 }
+// استدعاء دالة آمنة داخل قاعدة البيانات (RPC). cb(data, errInfo) - errInfo موجود بس لو فشلت العملية
+function sbRpc(fn,params,cb){
+  fetch(SB_URL+'/rest/v1/rpc/'+fn,{method:'POST',headers:SBH,body:JSON.stringify(params||{})})
+    .then(function(r){
+      return r.json().catch(function(){return null;}).then(function(d){return {ok:r.ok,data:d};});
+    })
+    .then(function(res){
+      if(res.ok)cb(res.data,null);
+      else cb(null,res.data||{message:'error'});
+    })
+    .catch(function(){cb(null,{message:'network'});});
+}
 function sbPost(table,body,prefer){
   var h=Object.assign({},SBH,{'Prefer':prefer||'return=minimal'});
   return fetch(SB_URL+'/rest/v1/'+table,{method:'POST',headers:h,body:JSON.stringify(body)})
@@ -1096,7 +1108,7 @@ function doLogin(){
   if(errEl)errEl.textContent='';
   var btn=document.getElementById('loginBtn');
   btn.textContent='جاري التحقق...';btn.disabled=true;
-  sbGet('app_users','username=eq.'+encodeURIComponent(u)+'&password=eq.'+encodeURIComponent(p)+'&select=username,role',function(rows){
+  sbRpc('verify_login',{p_username:u,p_password:p},function(rows){
     btn.textContent='دخول';btn.disabled=false;
     if(rows&&rows.length){
       localStorage.setItem('att_sess','1');
@@ -2933,7 +2945,7 @@ function buildFullBackupFiles(attendanceAll,stationsAll,linksAll){
 function loadUsers(){
   var el=document.getElementById('usersList');
   el.innerHTML='<div class="loading">&#9203; جاري التحميل...</div>';
-  sbGet('app_users','select=username,password,role&order=username.asc',function(rows){
+  sbRpc('list_app_users_security_check',{},function(rows){
     renderUsers(rows||[]);
   });
 }
@@ -2946,18 +2958,14 @@ function renderUsers(users){
     var roleLabel=u.role==='admin'?'أدمن - يشوف سجل التدقيق':'مشرف - بدون سجل التدقيق';
     var isSelf=u.username===myUser;
     var safeName=u.username.replace(/'/g,"\\'");
-    var safePass=(u.password||'').replace(/'/g,"\\'").replace(/</g,'&lt;');
     return '<div class="user-card">'+
       '<div class="user-info">'+
         '<div class="user-avatar">'+initial+'</div>'+
         '<div style="min-width:0">'+
           '<div class="user-name">'+u.username+(isSelf?' <span style="color:var(--blue);font-size:11px">(أنت)</span>':'')+'</div>'+
           '<div class="user-role">'+roleLabel+'</div>'+
-          '<div class="user-pass-row" id="prow_'+safeName+'">'+
-            '<span class="user-pass-dots" id="pdots_'+safeName+'">••••••••</span>'+
-            '<span class="user-pass-real" id="ptext_'+safeName+'" style="display:none">'+safePass+'</span>'+
-            '<button class="pass-eye-btn" onclick="toggleUserPassword(\''+safeName+'\')" id="peye_'+safeName+'" title="عرض كلمة المرور">&#128065;</button>'+
-          '</div>'+
+          (u.weak?'<div style="font-size:11px;color:var(--red);font-weight:700;margin-top:3px">&#9888;&#65039; الباسورد = اسم المستخدم، غيّرها فوراً</div>':
+            '<div style="font-size:11px;color:var(--muted);margin-top:3px">&#128274; الباسورد مشفّر وغير قابل للعرض</div>')+
         '</div>'+
       '</div>'+
       '<div class="user-acts">'+
@@ -2975,22 +2983,19 @@ function addUser(){
   if(p.length<4){toast('كلمة المرور قصيرة جداً (4 أحرف على الأقل)','warn');return;}
   var btn=document.getElementById('addUserBtn');
   btn.disabled=true;btn.textContent='جاري الإضافة...';
-  // تأكد أولاً أن الاسم غير مستخدم
-  sbGet('app_users','username=eq.'+encodeURIComponent(u)+'&select=username',function(existing){
-    if(existing&&existing.length){
-      btn.disabled=false;btn.innerHTML='&#10010; إضافة';
-      toast('اسم المستخدم موجود بالفعل','err');return;
+  sbRpc('add_app_user',{p_username:u,p_password:p,p_role:r},function(ok,err){
+    btn.disabled=false;btn.innerHTML='&#10010; إضافة';
+    if(ok===true){
+      document.getElementById('newUserName').value='';
+      document.getElementById('newUserPass').value='';
+      toast('تم إضافة المستخدم','ok');
+      logAudit('إضافة مستخدم',u+' - '+r);
+      loadUsers();
+    } else if(ok===false){
+      toast('اسم المستخدم موجود بالفعل','err');
+    } else {
+      toast('فشلت الإضافة، حاول مرة اخرى','err');
     }
-    sbPost('app_users',{username:u,password:p,role:r}).then(function(ok){
-      btn.disabled=false;btn.innerHTML='&#10010; إضافة';
-      if(ok){
-        document.getElementById('newUserName').value='';
-        document.getElementById('newUserPass').value='';
-        toast('تم إضافة المستخدم','ok');
-        logAudit('إضافة مستخدم',u+' - '+r);
-        loadUsers();
-      } else toast('فشلت الإضافة، حاول مرة اخرى','err');
-    });
   });
 }
 window.promptChangePassword=function(username){
@@ -3000,8 +3005,8 @@ window.promptChangePassword=function(username){
     function(){
       var np=document.getElementById('newPassInput').value;
       if(!np||np.length<4){toast('كلمة المرور قصيرة جداً (4 أحرف على الأقل)','warn');return;}
-      sbPatch('app_users','username=eq.'+encodeURIComponent(username),{password:np}).then(function(ok){
-        if(ok){toast('تم تغيير كلمة المرور','ok');logAudit('تغيير كلمة مرور',username);}
+      sbRpc('change_app_user_password',{p_username:username,p_new_password:np},function(ok){
+        if(ok){toast('تم تغيير كلمة المرور','ok');logAudit('تغيير كلمة مرور',username);loadUsers();}
         else toast('فشل التغيير','err');
       });
     },
@@ -3010,27 +3015,12 @@ window.promptChangePassword=function(username){
 };
 window.deleteUser=function(username){
   confirmModal('حذف المستخدم','حذف "'+username+'" نهائياً؟ لن يستطيع تسجيل الدخول بعد ذلك.',function(){
-    sbDel('app_users','username=eq.'+encodeURIComponent(username)).then(function(ok){
+    sbRpc('delete_app_user',{p_username:username},function(ok){
       if(ok){toast('تم حذف المستخدم','ok');logAudit('حذف مستخدم',username);loadUsers();}
       else toast('فشل الحذف','err');
     });
   });
 };
-window.toggleUserPassword=function(safeName){
-  var dots=document.getElementById('pdots_'+safeName);
-  var real=document.getElementById('ptext_'+safeName);
-  var eye=document.getElementById('peye_'+safeName);
-  if(!dots||!real)return;
-  var showing=real.style.display!=='none';
-  if(showing){
-    real.style.display='none';dots.style.display='inline';
-    if(eye){eye.innerHTML='&#128065;';eye.title='عرض كلمة المرور';}
-  } else {
-    real.style.display='inline';dots.style.display='none';
-    if(eye){eye.innerHTML='&#128683;';eye.title='إخفاء كلمة المرور';}
-  }
-};
-
 // ── SELF DIAGNOSTICS (منطقي بالكامل، بدون أي AI خارجي) ──
 // ── ORPHAN DATA CLEANUP (مراجعة يدوية محطة بمحطة قبل أي حذف) ──
 var _orphanSelected={};
@@ -3138,7 +3128,7 @@ function runDiagnostics(){
   sbGet('stations','select=*',function(allStations){
     sbGet('attendance','select=id,station&limit=5000',function(allAttendance){
       sbGet('manager_links','select=*',function(allLinks){
-        sbGet('app_users','select=username,password,role',function(allUsers){
+        sbRpc('list_app_users_security_check',{},function(allUsers){
 
           // 1) محطات بدون مدير
           (allStations||[]).forEach(function(s){
@@ -3158,7 +3148,7 @@ function runDiagnostics(){
             }
           });
 
-          // 2) مستخدمين بكلمة مرور ضعيفة
+          // 2) مستخدمين بكلمة مرور ضعيفة (باسورد = اسم المستخدم) - الباسورد نفسه مشفر ومش قابل للقراءة أصلاً
           function genStrongPassword(){
             var chars='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
             var out='';
@@ -3173,7 +3163,7 @@ function runDiagnostics(){
                 'سيتم توليد كلمة مرور جديدة قوية لـ "'+username+'" وتحديثها فوراً.',
               function(){
                 var newPass=genStrongPassword();
-                sbPatch('app_users','username=eq.'+encodeURIComponent(username),{password:newPass}).then(function(ok){
+                sbRpc('change_app_user_password',{p_username:username,p_new_password:newPass},function(ok){
                   if(ok){
                     logAudit('إصلاح تلقائي - كلمة مرور ضعيفة',username);
                     confirmModal(
@@ -3195,11 +3185,7 @@ function runDiagnostics(){
             );
           }
           (allUsers||[]).forEach(function(u){
-            if(!u.password||u.password.length<4){
-              addIssue('crit','&#128274;','كلمة مرور ضعيفة جداً',
-                'المستخدم "'+u.username+'" كلمة مروره أقل من 4 أحرف، يسهل تخمينها. الإصلاح يولّد كلمة مرور قوية عشوائية ويحدّثها فوراً (وستظهر لك بعد الضغط لتدوينها).',
-                function(){fixWeakPassword(u.username);},'إصلاح الآن (توليد كلمة قوية)');
-            } else if(u.password.toLowerCase()===u.username.toLowerCase()){
+            if(u.weak){
               addIssue('crit','&#128274;','كلمة مرور = اسم المستخدم',
                 'المستخدم "'+u.username+'" كلمة مروره مطابقة لاسم المستخدم، وده خطر أمان واضح. الإصلاح يولّد كلمة مرور قوية عشوائية ويحدّثها فوراً (وستظهر لك بعد الضغط لتدوينها).',
                 function(){fixWeakPassword(u.username);},'إصلاح الآن (توليد كلمة قوية)');
