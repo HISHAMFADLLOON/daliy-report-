@@ -190,6 +190,12 @@ input[type=date]:focus{border-color:var(--blue);}
 .merge-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
 .merge-tag{background:rgba(139,92,246,.15);color:var(--purple);border-radius:8px;
   padding:3px 9px;font-size:11px;font-weight:700;}
+.open-date-pill{display:inline-flex;align-items:center;gap:6px;background:rgba(16,185,129,.1);
+  border:1px solid rgba(16,185,129,.25);color:var(--green);border-radius:20px;
+  padding:4px 6px 4px 12px;font-size:12px;font-weight:700;}
+.open-date-pill span.od-x{cursor:pointer;color:var(--red);font-weight:900;
+  width:18px;height:18px;display:flex;align-items:center;justify-content:center;
+  background:rgba(239,68,68,.12);border-radius:50%;}
 
 /* LINK CARD */
 .lnk-card{background:var(--grad-card);border:1.5px solid var(--border);border-radius:18px;
@@ -996,7 +1002,7 @@ function saveStation(s){
   fetch(SB_URL+'/rest/v1/stations',{method:'POST',headers:h,body:JSON.stringify({
     id:s.id,name:s.name,manager:s.manager,employees:s.employees,
     manager_code:s.manager_code||'',manager_group:s.manager_group||null,
-    mgr_visible:s.mgr_visible!==false,updated_at:new Date().toISOString()
+    mgr_visible:s.mgr_visible!==false,open_dates:s.open_dates||[],updated_at:new Date().toISOString()
   })}).then(function(){updateManagerLink(s);}).catch(function(){});
 }
 function updateManagerLink(s){
@@ -1047,14 +1053,27 @@ function _initApp(){
     sbGet('manager_links','id=eq.'+encodeURIComponent(shortId)+'&select=*',function(rows){
       if(!rows||!rows.length){showLocked('الرابط غير موجود');return;}
       var lnk=rows[0];
-      if(lnk.used_date===todayISO){showLocked();return;}
-      showMgr({
-        stationName:lnk.station_name,
-        managerName:lnk.manager_name,
-        employees:Array.isArray(lnk.employees)?lnk.employees:[],
-        managerCode:lnk.manager_code||'',
-        showManager:lnk.show_manager!==false
-      },shortId);
+      var todayLocked=lnk.used_date===todayISO;
+      var stationId=Number((shortId.split('_')[0]))||null;
+      function boot(openDates){
+        if(todayLocked && !openDates.length){showLocked();return;}
+        showMgr({
+          stationName:lnk.station_name,
+          managerName:lnk.manager_name,
+          employees:Array.isArray(lnk.employees)?lnk.employees:[],
+          managerCode:lnk.manager_code||'',
+          showManager:lnk.show_manager!==false,
+          stationId:stationId
+        },shortId,openDates,todayLocked);
+      }
+      if(stationId){
+        sbGet('stations','id=eq.'+stationId+'&select=open_dates',function(sRows){
+          var od=(sRows&&sRows.length&&Array.isArray(sRows[0].open_dates))?sRows[0].open_dates.slice().sort():[];
+          boot(od);
+        });
+      } else {
+        boot([]);
+      }
     });
   } else {
     // لو فيه جلسة محفوظة بالفعل، دخول مباشر بدون طلب باسورد تاني
@@ -1338,7 +1357,7 @@ function addStation(){
   var m=document.getElementById('inMgr').value.trim();
   var c=document.getElementById('inCode').value.trim();
   if(!n||!m){toast('ادخل اسم المحطة والمدير','warn');return;}
-  var s={id:Date.now(),name:n,manager:m,employees:[],manager_code:c,manager_group:null,mgr_visible:true};
+  var s={id:Date.now(),name:n,manager:m,employees:[],manager_code:c,manager_group:null,mgr_visible:true,open_dates:[]};
   stations.push(s); saveStation(s); renderSt();
   logAudit('اضافة محطة',n+' - المدير: '+m);
   document.getElementById('inSt').value='';
@@ -1413,6 +1432,7 @@ function renderSt(){
               '<button class="btn btn-ghost" style="padding:5px 11px;font-size:12px" onclick="window._openEmpOv('+s.id+',\''+s.name.replace(/'/g,"\\'")+'\')">+ موظف</button>'+
             '</div></div>'+
           '<div style="margin-top:13px">'+mergeBoxHTML(s)+'</div>'+
+          '<div style="margin-top:13px">'+openDatesBoxHTML(s)+'</div>'+
           '<div style="margin-top:13px">'+
             '<div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:8px">كود المدير السري (اختياري &ndash; بدونه يدخل المدير بدون كود)</div>'+
             '<div class="row">'+
@@ -1503,6 +1523,53 @@ function mergeBoxHTML(s){
         '<button class="btn btn-ghost" style="padding:5px 11px;font-size:11px" onclick="window._setPrimaryMgr('+s.id+')">&#128065; اظهار المدير هنا بدل المحطة التانية</button>')+
     '</div></div>';
 }
+var AR_DAY_NAMES=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+function arDayLabel(iso){
+  var p=iso.split('-');
+  var dow=AR_DAY_NAMES[new Date(iso+'T00:00:00').getDay()];
+  return dow+' '+p[2]+'/'+p[1];
+}
+
+// ── فتح تسجيل حضور ليوم سابق (Backfill) ──
+function openDatesBoxHTML(s){
+  var dates=(s.open_dates||[]).slice().sort();
+  var pillsHTML=dates.length?dates.map(function(d){
+    return '<span class="open-date-pill">&#128197; '+arDayLabel(d)+
+      '<span class="od-x" onclick="window._removeOpenDate('+s.id+',\''+d+'\')">&#10005;</span></span>';
+  }).join(''):'<span style="font-size:12px;color:var(--muted)">مفيش أيام مفتوحة دلوقتي</span>';
+  return '<div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:8px">'+
+      '&#128197; فتح تسجيل حضور ليوم سابق (هيظهر للمدير على نفس رابطه الحالي)</div>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">'+pillsHTML+'</div>'+
+    '<div class="row">'+
+      '<input type="date" id="odIn_'+s.id+'" max="'+prevDayISO(todayISO)+'">'+
+      '<button class="btn btn-blue" onclick="window._addOpenDate('+s.id+')">فتح</button>'+
+    '</div>';
+}
+function prevDayISO(iso){
+  var d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()-1);
+  return d.toISOString().split('T')[0];
+}
+window._addOpenDate=function(sid){
+  var s=stations.find(function(x){return x.id===sid;});
+  if(!s)return;
+  var input=document.getElementById('odIn_'+sid);
+  var val=input?input.value:'';
+  if(!val){toast('اختار تاريخ الأول','warn');return;}
+  if(val>=todayISO){toast('لازم يكون تاريخ سابق (قبل النهاردة)','warn');return;}
+  s.open_dates=s.open_dates||[];
+  if(s.open_dates.indexOf(val)!==-1){toast('اليوم ده مفتوح بالفعل','warn');return;}
+  s.open_dates.push(val);
+  saveStation(s); renderSt();
+  logAudit('فتح يوم سابق للتسجيل',s.name+' - '+val);
+  toast('تم فتح يوم '+arDayLabel(val)+' لمدير '+s.name,'ok');
+};
+window._removeOpenDate=function(sid,dateIso){
+  var s=stations.find(function(x){return x.id===sid;});
+  if(!s)return;
+  s.open_dates=(s.open_dates||[]).filter(function(d){return d!==dateIso;});
+  saveStation(s); renderSt();
+  logAudit('قفل يوم سابق مفتوح',s.name+' - '+dateIso);
+};
 window._openMergeSel=function(sid){
   var s=stations.find(function(s){return s.id===sid;});
   if(!s)return;
@@ -1672,7 +1739,8 @@ var STATUSES=[
   {key:'انقطاع',cls:'sb-a',card:'s-abs',    note:true}
 ];
 
-function showMgr(info,lockKey){
+function showMgr(info,lockKey,openDates,todayLocked){
+  openDates=openDates||[];
   document.getElementById('mgrTitle').textContent=info.stationName;
   document.getElementById('mgrSub').textContent='المدير: '+info.managerName;
   document.title=info.stationName+' - تسجيل الحضور';
@@ -1697,7 +1765,7 @@ function showMgr(info,lockKey){
         return;
       }
       if(entered===info.managerCode){
-        showMgrForm(info,lockKey);
+        showMgrForm(info,lockKey,openDates,todayLocked);
       } else {
         document.getElementById('mgrCodeErr').textContent='الكود السري غلط، حاول تاني';
         document.getElementById('mgrCodeInput').value='';
@@ -1713,11 +1781,18 @@ function showMgr(info,lockKey){
     setTimeout(function(){document.getElementById('mgrCodeInput').focus();},100);
     return;
   }
-  showMgrForm(info,lockKey);
+  showMgrForm(info,lockKey,openDates,todayLocked);
 }
 
 var mgrIdleDestroy=null;
-function showMgrForm(info,lockKey){
+function showMgrForm(info,lockKey,openDates,todayLocked,targetDate){
+  openDates=openDates||[];
+  // تحديد اليوم المستهدف: لو محددش، افتراضياً اليوم لو مش مقفول، وإلا أول يوم سابق مفتوح
+  if(!targetDate){
+    targetDate=(!todayLocked)?todayISO:(openDates[0]||todayISO);
+  }
+  var isToday=targetDate===todayISO;
+
   // إيقاف أي idle timer سابق (لو الصفحة دي اتفتحت قبل كده) قبل بدء جديد، لمنع التكرار
   if(mgrIdleDestroy){mgrIdleDestroy();mgrIdleDestroy=null;}
 
@@ -1725,7 +1800,30 @@ function showMgrForm(info,lockKey){
     (info.employees.indexOf(info.managerName)!==-1?info.employees:[info.managerName].concat(info.employees));
   var total=people.length;
   var att={};
-  var dateStr=new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  var dateStr=isToday?
+    new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'}):
+    arDayLabel(targetDate)+' (تسجيل متأخر)';
+
+  // ── تابات اختيار اليوم (لو فيه أيام سابقة مفتوحة) ──
+  var tabsHTML='';
+  if(openDates.length){
+    var tabs=[{key:todayISO,label:'اليوم',disabled:todayLocked}].concat(
+      openDates.map(function(d){return {key:d,label:arDayLabel(d),disabled:false};})
+    );
+    tabsHTML='<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:12px">'+
+      tabs.map(function(t){
+        var active=t.key===targetDate;
+        var style=active?
+          'background:var(--grad-main);color:#fff;border-color:transparent':
+          (t.disabled?'opacity:.45;text-decoration:line-through':'');
+        return '<button '+(t.disabled?'disabled':'onclick="window._mgrSwitchDay(\''+t.key+'\')"')+
+          ' style="flex:0 0 auto;padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;'+
+          'border:1.5px solid var(--border);background:var(--card);color:var(--text);cursor:pointer;white-space:nowrap;'+style+'">'+
+          (t.disabled?'&#10003; ':'')+t.label+'</button>';
+      }).join('')+
+    '</div>';
+  }
+  window._mgrSwitchDay=function(d){showMgrForm(info,lockKey,openDates,todayLocked,d);};
 
   function buildCard(name,isMgr){
     var btns=STATUSES.map(function(s){
@@ -1745,12 +1843,13 @@ function showMgrForm(info,lockKey){
 
   document.getElementById('mgrBody').innerHTML=
     '<div class="mgr-wrap">'+
+      tabsHTML+
       '<div class="ip">'+
         '<div class="ip-station">'+info.stationName+'</div>'+
         '<div class="ip-mgr">المدير: '+info.managerName+'</div>'+
         '<div class="ip-clock">'+
           '<div class="ip-clock-ic">&#128337;</div>'+
-          '<div><div class="ip-clock-time" id="mgrClockTime">--:--:--</div>'+
+          '<div><div class="ip-clock-time" id="mgrClockTime">'+(isToday?'--:--:--':'&#128197;')+'</div>'+
           '<div class="ip-clock-date" id="mgrClockDate">'+dateStr+'</div></div>'+
         '</div>'+
       '</div>'+
@@ -1798,30 +1897,32 @@ function showMgrForm(info,lockKey){
   document.getElementById('addPersonBtn').addEventListener('click',addPerson);
   document.getElementById('newPersonInput').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();addPerson();}});
 
-  // ── الساعة الحية: تتحدث كل ثانية، والتاريخ يتجدد تلقائياً عند تغيّر اليوم ──
+  // ── الساعة الحية: تشتغل بس لو بنسجل حضور "اليوم"، مش للأيام السابقة المتأخرة ──
   if(mgrClockTimer)clearInterval(mgrClockTimer);
-  var mgrClockLastDay=new Date().toDateString();
-  function mgrClockTick(){
-    var now=new Date();
-    var timeEl=document.getElementById('mgrClockTime');
-    var dateEl=document.getElementById('mgrClockDate');
-    if(!timeEl||!dateEl){clearInterval(mgrClockTimer);return;} // الصفحة تغيّرت (مثلاً تم إرسال التقرير)
-    timeEl.textContent=now.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    var curDay=now.toDateString();
-    if(curDay!==mgrClockLastDay){
-      mgrClockLastDay=curDay;
-      dateEl.textContent=now.toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  if(isToday){
+    var mgrClockLastDay=new Date().toDateString();
+    function mgrClockTick(){
+      var now=new Date();
+      var timeEl=document.getElementById('mgrClockTime');
+      var dateEl=document.getElementById('mgrClockDate');
+      if(!timeEl||!dateEl){clearInterval(mgrClockTimer);return;} // الصفحة تغيّرت (مثلاً تم إرسال التقرير)
+      timeEl.textContent=now.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      var curDay=now.toDateString();
+      if(curDay!==mgrClockLastDay){
+        mgrClockLastDay=curDay;
+        dateEl.textContent=now.toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+      }
     }
+    mgrClockTick();
+    mgrClockTimer=setInterval(mgrClockTick,1000);
   }
-  mgrClockTick();
-  mgrClockTimer=setInterval(mgrClockTick,1000);
 
   // قفل تلقائي بعد 30 دقيقة خمول: يرجع المدير لشاشة الكود السري ويبدأ من جديد
   mgrIdleDestroy=setupIdleTimer(function(){
     if(mgrClockTimer){clearInterval(mgrClockTimer);mgrClockTimer=null;}
     if(mgrIdleDestroy){mgrIdleDestroy();mgrIdleDestroy=null;}
     toast('تم قفل الصفحة لعدم الاستخدام، ادخل الكود تاني','warn');
-    showMgr(info,lockKey);
+    showMgr(info,lockKey,openDates,todayLocked);
   });
 
   document.getElementById('subBtn').addEventListener('click',function(){
@@ -1871,7 +1972,7 @@ function showMgrForm(info,lockKey){
 
     // زرار تعديل - يرجع لشاشة التسجيل
     document.getElementById('backBtn').addEventListener('click',function(){
-      showMgrForm(info,lockKey);
+      showMgrForm(info,lockKey,openDates,todayLocked,targetDate);
     });
 
     // زرار تأكيد الإرسال
@@ -1884,9 +1985,10 @@ function showMgrForm(info,lockKey){
       var now=new Date();
       // تنسيق يدوي بأرقام إنجليزية عادية (dd/mm/yyyy و hh:mm) بدون استخدام toLocaleDateString('ar-EG')
       // لأنها تُدخل أرقاماً عربية هندية ورموز اتجاه (RTL marks) خفية تُخرّب عرض النص في تيليجرام وأماكن أخرى
-      var dd=String(now.getDate()).padStart(2,'0');
-      var mm=String(now.getMonth()+1).padStart(2,'0');
-      var yyyy=now.getFullYear();
+      var reportDateObj=isToday?now:new Date(targetDate+'T12:00:00');
+      var dd=String(reportDateObj.getDate()).padStart(2,'0');
+      var mm=String(reportDateObj.getMonth()+1).padStart(2,'0');
+      var yyyy=reportDateObj.getFullYear();
       var date=dd+'/'+mm+'/'+yyyy;
       var hh24=now.getHours();
       var ampm=hh24>=12?'م':'ص';
@@ -1898,8 +2000,8 @@ function showMgrForm(info,lockKey){
       });
       sbPost('attendance',{
         station:info.stationName,manager:info.managerName,
-        report_date:date,report_date_iso:now.toISOString().split('T')[0],
-        report_time:time,employees:emps
+        report_date:date,report_date_iso:targetDate,
+        report_time:time+(isToday?'':' (تسجيل متأخر)'),employees:emps
       }).then(function(ok){
         if(!ok){
           // الحفظ فشل: لا نقفل الرابط ولا نعرض نجاح، ونعطي فرصة إعادة المحاولة
@@ -1916,23 +2018,53 @@ function showMgrForm(info,lockKey){
           warnEl.textContent='⚠️ فشل حفظ التقرير، تحقق من الاتصال بالانترنت وحاول تاني';
           return;
         }
-        // الحفظ نجح فعلياً: نقفل الرابط الآن فقط
+        // الحفظ نجح فعلياً
         var groups={};STATUSES.forEach(function(s){groups[s.key]=[];});
         emps.forEach(function(e){var lbl=e.note?e.name+'('+e.note+')':e.name;if(groups[e.status])groups[e.status].push(lbl);});
-        var msg='تقرير حضور\n'+info.stationName+' - '+info.managerName+'\n'+date+' - '+time+'\n---\n';
+        var msg=(isToday?'تقرير حضور':'تقرير حضور متأخر')+'\n'+info.stationName+' - '+info.managerName+'\n'+date+' - '+time+'\n---\n';
         STATUSES.forEach(function(s){if(groups[s.key].length)msg+=s.key+': '+groups[s.key].join(', ')+'\n';});
         fetch('https://api.telegram.org/bot'+BOT_TOKEN+'/sendMessage',{
           method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({chat_id:CHAT_ID,text:msg})
         }).catch(function(){});
-        sbPatch('manager_links','id=eq.'+encodeURIComponent(lockKey),{used_date:todayISO});
-        // الرابط أصبح مقفولاً بنجاح، فلا حاجة لاستمرار تتبع الخمول أو الساعة الحية بعد هذه النقطة
-        if(mgrClockTimer){clearInterval(mgrClockTimer);mgrClockTimer=null;}
-        if(mgrIdleDestroy){mgrIdleDestroy();mgrIdleDestroy=null;}
-        document.getElementById('mgrBody').innerHTML=
-          '<div class="cs"><div class="cs-icon">&#10003;</div>'+
-          '<div class="cs-title">تم ارسال التقرير</div>'+
-          '<div class="cs-sub">'+info.stationName+'<br>تم الحفظ بنجاح<br>هذا الرابط مقفول اليوم</div></div>';
+
+        if(isToday){
+          // إرسال تقرير اليوم العادي: نقفل الرابط زي ما هو دايماً
+          sbPatch('manager_links','id=eq.'+encodeURIComponent(lockKey),{used_date:todayISO});
+          todayLocked=true;
+          var remainingAfterToday=openDates.slice();
+          if(!remainingAfterToday.length){
+            // خلاص كل حاجة اتقفلت، مفيش أيام سابقة تانية مفتوحة
+            if(mgrClockTimer){clearInterval(mgrClockTimer);mgrClockTimer=null;}
+            if(mgrIdleDestroy){mgrIdleDestroy();mgrIdleDestroy=null;}
+            document.getElementById('mgrBody').innerHTML=
+              '<div class="cs"><div class="cs-icon">&#10003;</div>'+
+              '<div class="cs-title">تم ارسال التقرير</div>'+
+              '<div class="cs-sub">'+info.stationName+'<br>تم الحفظ بنجاح<br>هذا الرابط مقفول اليوم</div></div>';
+          } else {
+            toast('تم إرسال تقرير اليوم بنجاح','ok');
+            showMgrForm(info,lockKey,remainingAfterToday,true,remainingAfterToday[0]);
+          }
+        } else {
+          // تسجيل متأخر ليوم سابق: نشيل اليوم ده من قايمة الأيام المفتوحة بس، من غير ما نلمس رابط اليوم
+          var newOpenDates=openDates.filter(function(d){return d!==targetDate;});
+          if(info.stationId){
+            sbPatch('stations','id=eq.'+info.stationId,{open_dates:newOpenDates}).catch(function(){});
+          }
+          toast('تم تسجيل حضور يوم '+arDayLabel(targetDate)+' بنجاح','ok');
+          if(newOpenDates.length){
+            showMgrForm(info,lockKey,newOpenDates,todayLocked,newOpenDates[0]);
+          } else if(!todayLocked){
+            showMgrForm(info,lockKey,newOpenDates,todayLocked,todayISO);
+          } else {
+            if(mgrClockTimer){clearInterval(mgrClockTimer);mgrClockTimer=null;}
+            if(mgrIdleDestroy){mgrIdleDestroy();mgrIdleDestroy=null;}
+            document.getElementById('mgrBody').innerHTML=
+              '<div class="cs"><div class="cs-icon">&#10003;</div>'+
+              '<div class="cs-title">تم تسجيل كل الأيام</div>'+
+              '<div class="cs-sub">'+info.stationName+'<br>مفيش أيام تانية محتاجة تسجيل دلوقتي</div></div>';
+          }
+        }
       }).catch(function(){
         // فشل الشبكة بالكامل (مثلاً مفيش انترنت خالص)
         btn.disabled=false;btn.textContent='✓ تأكيد الإرسال';
