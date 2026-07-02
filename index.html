@@ -864,7 +864,13 @@ var filterStatus = 'all';
 var searchEmp = '';
 var statsChartInstance = null;
 var activeStId = null;
-var todayISO  = new Date().toISOString().split('T')[0];
+// دالة موحدة لحساب التاريخ المحلي الصحيح (yyyy-mm-dd) - بدون تحويل لتوقيت UTC
+// السبب: new Date().toISOString() بيحول الوقت لتوقيت جرينتش، وده بيرجّع تاريخ يوم للخلف
+// في أي وقت قبل ما توقيت جرينتش "يلحق" اليوم المحلي (مصر +3 ساعات مثلاً)
+function localISO(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+var todayISO  = localISO(new Date());
 
 // ── THEME ──
 var isDark = localStorage.getItem('att_theme') !== 'light';
@@ -1547,7 +1553,7 @@ function openDatesBoxHTML(s){
 }
 function prevDayISO(iso){
   var d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()-1);
-  return d.toISOString().split('T')[0];
+  return localISO(d);
 }
 window._addOpenDate=function(sid){
   var s=stations.find(function(x){return x.id===sid;});
@@ -2149,7 +2155,7 @@ function setupRecordsBtns(){
       var diffSun=day===0?0:day;
       var sun=new Date(now); sun.setDate(now.getDate()-diffSun);
       var sat=new Date(sun); sat.setDate(sun.getDate()+6);
-      var fmt=function(d){return d.toISOString().split('T')[0];};
+      var fmt=function(d){return localISO(d);};
       var startISO=fmt(sun), endISO=fmt(sat);
       toast('جاري تحميل بيانات الأسبوع...','ok');
       sbGet('attendance','report_date_iso=gte.'+startISO+'&report_date_iso=lte.'+endISO+'&order=created_at.asc&limit=1000',function(data){
@@ -2881,7 +2887,7 @@ function buildExcelWeek(data,startISO,endISO,mode){
   var end=new Date(endISO+'T00:00:00');
   var dayNames=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
   while(cur<=end){
-    var iso=cur.toISOString().split('T')[0];
+    var iso=localISO(cur);
     var p=iso.split('-');
     days.push({lbl:dayNames[cur.getDay()]+' '+p[2]+'/'+p[1],iso:iso});
     cur.setDate(cur.getDate()+1);
@@ -3064,7 +3070,7 @@ function executeEmptyAttendance(count){
 function buildFullBackupFiles(attendanceAll,stationsAll,linksAll){
   if(typeof XLSX==='undefined'){toast('انتظر تحميل المكتبة ثم حاول مرة اخرى','warn');return;}
   var now=new Date();
-  var stamp=now.toISOString().split('T')[0]+'_'+String(now.getHours()).padStart(2,'0')+String(now.getMinutes()).padStart(2,'0');
+  var stamp=localISO(now)+'_'+String(now.getHours()).padStart(2,'0')+String(now.getMinutes()).padStart(2,'0');
 
   // 1) ملف JSON خام (نسخة دقيقة 100% للاستعادة لاحقاً عند الحاجة)
   var jsonBlob={
