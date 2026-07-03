@@ -554,6 +554,19 @@ select.sel:focus{border-color:var(--blue);}
       <input type="text" id="inCode" placeholder="كود المدير (اختياري)">
       <button class="btn btn-blue" id="addStBtn">+</button>
     </div>
+    <div class="sec" style="margin-top:24px">&#128197; فتح تسجيل يوم سابق (لمحطة واحدة أو أكتر)</div>
+    <div class="merge-box" style="margin-bottom:16px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">اختار محطة أو أكتر من القايمة تحت، وحدد التاريخ، وهيتفتح لكل المحطات المختارة مرة واحدة</div>
+      <div id="bulkOpenStList" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;max-height:180px;overflow-y:auto"></div>
+      <div class="row">
+        <input type="date" id="bulkOpenDate" max="">
+        <button class="btn btn-blue" id="bulkOpenBtn">فتح للمحطات المختارة</button>
+      </div>
+      <div style="margin-top:8px;display:flex;gap:14px;font-size:12px">
+        <span style="color:var(--blue);cursor:pointer;font-weight:700" onclick="window._bulkOpenSelectAll(true)">تحديد الكل</span>
+        <span style="color:var(--muted);cursor:pointer;font-weight:700" onclick="window._bulkOpenSelectAll(false)">الغاء التحديد</span>
+      </div>
+    </div>
     <div class="sec" style="margin-top:24px">المحطات المضافة</div>
     <div class="row" style="margin-bottom:12px">
       <input type="text" id="stSearch" placeholder="&#128269; بحث باسم المحطة أو المدير">
@@ -1417,6 +1430,10 @@ function loadRecordsTab(){
 document.getElementById('addStBtn').addEventListener('click',addStation);
 var stSearchEl=document.getElementById('stSearch');
 if(stSearchEl)stSearchEl.addEventListener('input',renderSt);
+var bulkOpenBtnEl=document.getElementById('bulkOpenBtn');
+if(bulkOpenBtnEl)bulkOpenBtnEl.addEventListener('click',bulkOpenDate);
+var bulkOpenDateEl=document.getElementById('bulkOpenDate');
+if(bulkOpenDateEl)bulkOpenDateEl.setAttribute('max',prevDayISO(todayISO));
 function addStation(){
   var n=document.getElementById('inSt').value.trim();
   var m=document.getElementById('inMgr').value.trim();
@@ -1474,6 +1491,7 @@ window._delStationKeepRecords=function(id){
 function toggleSt(id){var el=document.getElementById('sc'+id);if(el)el.classList.toggle('open');}
 function renderSt(){
   var el=document.getElementById('stList');if(!el)return;
+  renderBulkOpenList();
   if(!stations.length){el.innerHTML='<div class="empty"><div class="ei">&#127979;</div><p>لا توجد محطات بعد</p></div>';return;}
   var q=(document.getElementById('stSearch')||{}).value||'';
   q=q.trim().toLowerCase();
@@ -1654,6 +1672,54 @@ window._removeOpenDate=function(sid,dateIso){
   saveStation(s); renderSt();
   logAudit('قفل يوم سابق مفتوح',s.name+' - '+dateIso);
 };
+
+// ── فتح تسجيل يوم سابق لعدة محطات دفعة واحدة ──
+function renderBulkOpenList(){
+  var el=document.getElementById('bulkOpenStList');
+  if(!el)return;
+  var checkedIds={};
+  el.querySelectorAll('input[type=checkbox]').forEach(function(cb){
+    if(cb.checked)checkedIds[cb.value]=true;
+  });
+  if(!stations.length){el.innerHTML='<span style="font-size:12px;color:var(--muted)">مفيش محطات لسه</span>';return;}
+  el.innerHTML=stations.map(function(s){
+    var checked=checkedIds[s.id]?'checked':'';
+    return '<label style="display:flex;align-items:center;gap:6px;background:var(--bg);border:1.5px solid var(--border);'+
+      'border-radius:20px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">'+
+      '<input type="checkbox" value="'+s.id+'" '+checked+' style="width:15px;height:15px;accent-color:var(--blue)">'+
+      s.name+'</label>';
+  }).join('');
+}
+window._bulkOpenSelectAll=function(select){
+  var el=document.getElementById('bulkOpenStList');
+  if(!el)return;
+  el.querySelectorAll('input[type=checkbox]').forEach(function(cb){cb.checked=select;});
+};
+function bulkOpenDate(){
+  var el=document.getElementById('bulkOpenStList');
+  var dateInput=document.getElementById('bulkOpenDate');
+  var val=dateInput?dateInput.value:'';
+  if(!val){toast('اختار تاريخ الأول','warn');return;}
+  if(val>=todayISO){toast('لازم يكون تاريخ سابق (قبل النهاردة)','warn');return;}
+  var selectedIds=[];
+  el.querySelectorAll('input[type=checkbox]:checked').forEach(function(cb){selectedIds.push(Number(cb.value));});
+  if(!selectedIds.length){toast('اختار محطة واحدة على الأقل','warn');return;}
+  var opened=0,skipped=0;
+  selectedIds.forEach(function(sid){
+    var s=stations.find(function(x){return x.id===sid;});
+    if(!s)return;
+    s.open_dates=s.open_dates||[];
+    if(s.open_dates.indexOf(val)!==-1){skipped++;return;}
+    s.open_dates.push(val);
+    saveStation(s);
+    opened++;
+  });
+  renderSt();
+  logAudit('فتح يوم سابق لعدة محطات',arDayLabel(val)+' - '+opened+' محطة');
+  if(opened&&!skipped)toast('تم فتح '+arDayLabel(val)+' لـ '+opened+' محطة','ok');
+  else if(opened&&skipped)toast('تم فتح '+opened+' محطة، و'+skipped+' كانت مفتوحة بالفعل','ok');
+  else toast('كل المحطات المختارة كان اليوم ده مفتوح عندها بالفعل','warn');
+}
 window._openMergeSel=function(sid){
   var s=stations.find(function(s){return s.id===sid;});
   if(!s)return;
