@@ -1049,6 +1049,33 @@ function delStationDBKeepRecords(id,stationName,cb){
 // ── LOGIN ──
 function isLoggedIn(){return true;}
 
+// يبني "تطبيق" مستقل مخصص لرابط المدير: لو عمل "تثبيت/إضافة للشاشة الرئيسية"،
+// الأيقونة هتفتحله على رابطه هو بالظبط، مش على صفحة تسجيل دخول الأدمن
+function setupManagerAppManifest(shortId, stationName){
+  try{
+    var name=stationName?('تسجيل حضور - '+stationName):'تسجيل الحضور';
+    var shortName=(stationName||'حضور').slice(0,12);
+    var manifest={
+      name:name,
+      short_name:shortName,
+      start_url:location.pathname+'?id='+encodeURIComponent(shortId),
+      scope:location.pathname,
+      display:'standalone',
+      orientation:'portrait',
+      background_color:'#07101e',
+      theme_color:'#07101e',
+      icons:[
+        {src:new URL('./icon-192.png',location.href).href,sizes:'192x192',type:'image/png'},
+        {src:new URL('./icon-180.png',location.href).href,sizes:'180x180',type:'image/png'}
+      ]
+    };
+    var blob=new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'});
+    var url=URL.createObjectURL(blob);
+    var link=document.querySelector('link[rel="manifest"]');
+    if(link) link.setAttribute('href',url);
+  }catch(e){/* لو فشلت لأي سبب، الموقع يفضل شغال عادي بدون تأثير */}
+}
+
 function _initApp(){
   try{
   applyTheme();
@@ -1067,9 +1094,11 @@ function _initApp(){
     document.getElementById('mgrUI').style.display='block';
     document.getElementById('mgrTitle').textContent=stName||'جاري التحميل...';
     document.getElementById('mgrBody').innerHTML='<div class="loading">&#9203; جاري التحميل...</div>';
+    setupManagerAppManifest(shortId, stName); // يخلي "تثبيت التطبيق" يفتح على رابط المدير نفسه مش صفحة الأدمن
     sbGet('manager_links','id=eq.'+encodeURIComponent(shortId)+'&select=*',function(rows){
       if(!rows||!rows.length){showLocked('الرابط غير موجود');return;}
       var lnk=rows[0];
+      setupManagerAppManifest(shortId, lnk.station_name); // تحديث الاسم في التطبيق باسم المحطة الصحيح بعد ما يوصل
       var todayLocked=lnk.used_date===todayISO;
       var stationId=Number((shortId.split('_')[0]))||null;
       function boot(openDates){
@@ -1330,11 +1359,30 @@ function loadDash(){
             '<div style="font-size:12px;color:var(--muted)">'+lastRec.manager+' - '+lastRec.report_time+'</div>'+
           '</div>':'')+
       '</div>'+
-      (reported.length?'<div class="sec">المحطات اللي سجّلت ('+reported.length+')</div>'+reportedHTML:'')+
-      (pending.length?'<div class="sec">المحطات اللي لم تسجّل ('+pending.length+')</div>'+pendingHTML:
-        (stations.length?'<div class="empty"><div class="ei">🎉</div><p>كل المحطات سجّلت الحضور اليوم!</p></div>':''));
+      (pending.length?
+        '<div class="sec" style="color:var(--red)">&#9203; المحطات اللي لسه محتاجة تسجيل ('+pending.length+')</div>'+pendingHTML:
+        (stations.length?'<div class="empty"><div class="ei">🎉</div><p>كل المحطات سجّلت الحضور اليوم!</p></div>':''))+
+      (reported.length?
+        '<div class="sec" style="color:var(--green);margin-top:16px;cursor:pointer;display:flex;align-items:center;gap:6px" onclick="window._toggleReportedSec()">'+
+          '<span id="reportedSecArrow" style="transition:transform .2s;display:inline-block">&#9660;</span>'+
+          ' المحطات اللي سجّلت ('+reported.length+')'+
+        '</div>'+
+        '<div id="reportedSecBody">'+reportedHTML+'</div>':'');
+    applyReportedSecState();
   });
 }
+var dashReportedCollapsed=false; // الحالة الافتراضية: مفتوح، وبتفضل محفوظة طول الجلسة حتى بعد كل تحديث
+function applyReportedSecState(){
+  var body=document.getElementById('reportedSecBody');
+  var arrow=document.getElementById('reportedSecArrow');
+  if(!body||!arrow)return;
+  body.style.display=dashReportedCollapsed?'none':'block';
+  arrow.style.transform=dashReportedCollapsed?'rotate(-90deg)':'rotate(0deg)';
+}
+window._toggleReportedSec=function(){
+  dashReportedCollapsed=!dashReportedCollapsed;
+  applyReportedSecState();
+};
 
 // ── TABS ──
 function setupTabs(){
