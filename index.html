@@ -1034,6 +1034,17 @@ function delStationDB(id,stationName,cb){
     checkDone();checkDone();
   }
 }
+function delStationDBKeepRecords(id,stationName,cb){
+  // نحذف المحطة والروابط بس، ونسيب سجلات الحضور التاريخية زي ما هي في القاعدة
+  var done=0,total=2;
+  function checkDone(){done++;if(done===total&&cb)cb();}
+  sbDel('stations','id=eq.'+id).then(checkDone);
+  if(stationName){
+    sbDel('manager_links','station_name=eq.'+encodeURIComponent(stationName)).then(checkDone);
+  } else {
+    checkDone();
+  }
+}
 
 // ── LOGIN ──
 function isLoggedIn(){return true;}
@@ -1377,22 +1388,41 @@ function delStation(id){
   // نحسب عدد سجلات الحضور المرتبطة فعلياً قبل عرض رسالة التأكيد
   sbGet('attendance','station=eq.'+encodeURIComponent(s.name)+'&select=id',function(rows){
     var recCount=(rows||[]).length;
-    var msg='حذف "'+s.name+'" نهائياً؟<br><br>'+
+    var msg='حذف "'+s.name+'"؟<br><br>'+
       (recCount>0?
-        '<span style="color:var(--red);font-weight:900">سيتم أيضاً حذف '+recCount+' سجل حضور تاريخي</span> تابع لهذه المحطة من قاعدة البيانات بشكل نهائي.':
+        'المحطة دي مرتبط بيها <b>'+recCount+' سجل حضور</b> تاريخي. اختار تحت هتعمل ايه بيهم:':
         'لا توجد سجلات حضور مرتبطة بهذه المحطة حالياً.')+
-      '<br><br>لا يمكن التراجع عن هذا الإجراء أبداً.';
-    confirmModal('حذف المحطة وكل سجلاتها','',function(){
-      toast('جاري الحذف...','ok');
-      delStationDB(id,s.name,function(){
-        stations=stations.filter(function(x){return x.id!==id;});
-        renderSt();
-        logAudit('حذف محطة وسجلاتها',s.name+' - '+recCount+' سجل حضور');
-        toast('تم حذف المحطة و'+recCount+' سجل بنجاح','ok');
-      });
-    },{okLabel:'حذف نهائياً ('+recCount+' سجل)',extraHtml:msg});
+      '<br><br>لا يمكن التراجع عن حذف المحطة نفسها أبداً.'+
+      (recCount>0?
+        '<div style="margin-top:12px"><button class="btn btn-ghost" style="width:100%;border-color:rgba(16,185,129,.3);color:var(--green)" '+
+        'onclick="window._delStationKeepRecords('+id+')">&#128451; احذف المحطة بس، واحتفظ بالـ '+recCount+' سجل</button></div>':'');
+    confirmModal('حذف المحطة',
+      '',
+      function(){
+        toast('جاري الحذف...','ok');
+        delStationDB(id,s.name,function(){
+          stations=stations.filter(function(x){return x.id!==id;});
+          renderSt();
+          logAudit('حذف محطة وسجلاتها',s.name+' - '+recCount+' سجل حضور');
+          toast('تم حذف المحطة و'+recCount+' سجل بنجاح','ok');
+        });
+      },
+      {okLabel:recCount>0?'احذف الكل (المحطة + '+recCount+' سجل)':'حذف المحطة',extraHtml:msg});
   });
 }
+window._delStationKeepRecords=function(id){
+  var s=stations.find(function(x){return x.id===id;});
+  if(!s)return;
+  document.getElementById('confirmOv').classList.remove('open');
+  _confirmCb=null;
+  toast('جاري الحذف...','ok');
+  delStationDBKeepRecords(id,s.name,function(){
+    stations=stations.filter(function(x){return x.id!==id;});
+    renderSt();
+    logAudit('حذف محطة (مع الاحتفاظ بالسجلات)',s.name);
+    toast('تم حذف المحطة، وسجلات الحضور محفوظة زي ما هي','ok');
+  });
+};
 function toggleSt(id){var el=document.getElementById('sc'+id);if(el)el.classList.toggle('open');}
 function renderSt(){
   var el=document.getElementById('stList');if(!el)return;
