@@ -421,6 +421,16 @@ select.sel:focus{border-color:var(--blue);}
 .dash-card-wide{grid-column:1/-1;}
 .dash-num{font-size:34px;font-weight:900;line-height:1;margin-bottom:4px;}
 .dash-lbl{font-size:12px;color:var(--muted);font-weight:700;}
+.dash-summary-card{background:var(--card);border:1.5px solid var(--border);border-radius:16px;
+  padding:16px 18px;margin-bottom:12px;}
+.dash-summary-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;}
+.dash-summary-num{font-size:26px;font-weight:900;color:var(--text);}
+.dash-summary-lbl{font-size:13px;color:var(--muted);font-weight:700;}
+.dash-summary-bar{background:var(--bg);border-radius:20px;height:9px;overflow:hidden;}
+.dash-summary-bar-fill{background:var(--grad-main);height:100%;border-radius:20px;transition:width .4s;}
+.dash-stale-card{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);
+  color:var(--gold);border-radius:12px;padding:10px 14px;font-size:12.5px;font-weight:700;
+  margin-bottom:12px;line-height:1.7;}
 .dash-station-row{display:flex;justify-content:space-between;align-items:center;
   padding:12px 15px;border-radius:13px;margin-bottom:8px;font-size:13px;
   border:1.5px solid transparent;transition:transform .15s;}
@@ -724,6 +734,7 @@ select.sel:focus{border-color:var(--blue);}
       </div>
     </div>
     <div class="hdr-r">
+      <button class="theme-btn" id="mgrNotifyBtn" title="تفعيل تذكير الحضور" style="display:none">&#128276;</button>
       <button class="theme-btn" id="themeBtnMgr" title="تغيير الوضع">&#9788;</button>
       <div class="badge badge-blue">مدير</div>
     </div>
@@ -1089,6 +1100,82 @@ function setupManagerAppManifest(shortId, stationName){
   }catch(e){/* لو فشلت لأي سبب، الموقع يفضل شغال عادي بدون تأثير */}
 }
 
+// ── تذكير الحضور (إشعار متصفح محلي) ──
+// ملاحظة مهمة: ده إشعار محلي شغال بس لو التطبيق/التاب فاتح (في المقدمة أو الخلفية)،
+// مش إشعار push حقيقي بيوصل حتى لو التطبيق مقفول تماماً - ده محتاج سيرفر إشعارات منفصل
+var mgrNotifyState={enabled:false,todayLocked:false,stationName:'',shortId:''};
+function mgrNotifyKey(shortId){return 'mgr_notify_'+shortId;}
+function updateMgrNotifyBtn(){
+  var btn=document.getElementById('mgrNotifyBtn');
+  if(!btn)return;
+  btn.style.display='inline-flex';
+  if(mgrNotifyState.enabled){
+    btn.innerHTML='&#128276;';
+    btn.style.color='var(--gold)';
+    btn.title='التذكير مفعّل - دوس للإلغاء';
+  } else {
+    btn.innerHTML='&#128277;';
+    btn.style.color='';
+    btn.title='فعّل تذكير لو نسيت تسجل الحضور';
+  }
+}
+function setupMgrReminder(shortId,stationName,todayLocked){
+  mgrNotifyState.shortId=shortId;
+  mgrNotifyState.stationName=stationName;
+  mgrNotifyState.todayLocked=todayLocked;
+  mgrNotifyState.enabled=('Notification' in window)&&Notification.permission==='granted'&&localStorage.getItem(mgrNotifyKey(shortId))==='1';
+  updateMgrNotifyBtn();
+  if(window._mgrReminderInterval)clearInterval(window._mgrReminderInterval);
+  window._mgrReminderInterval=setInterval(checkMgrReminder,5*60*1000);
+  checkMgrReminder();
+}
+function checkMgrReminder(){
+  if(!mgrNotifyState.enabled||mgrNotifyState.todayLocked)return;
+  if(!('Notification' in window)||Notification.permission!=='granted')return;
+  var hour=new Date().getHours();
+  if(hour<12)return; // ما نزعجش المدير قبل الظهر
+  var lastShownKey='mgr_notify_last_'+mgrNotifyState.shortId;
+  if(localStorage.getItem(lastShownKey)===todayISO)return; // اتبعت له تذكير النهاردة بالفعل
+  try{
+    new Notification('تذكير بتسجيل الحضور',{
+      body:'لسه ما سجلتش حضور اليوم في '+mgrNotifyState.stationName,
+      icon:'./icon-192.png'
+    });
+    localStorage.setItem(lastShownKey,todayISO);
+  }catch(e){}
+}
+document.getElementById('mgrNotifyBtn').addEventListener('click',function(){
+  var shortId=mgrNotifyState.shortId;
+  if(!shortId)return;
+  if(mgrNotifyState.enabled){
+    localStorage.removeItem(mgrNotifyKey(shortId));
+    mgrNotifyState.enabled=false;
+    updateMgrNotifyBtn();
+    toast('تم إلغاء التذكير','ok');
+    return;
+  }
+  if(!('Notification' in window)){toast('المتصفح ده مش بيدعم الإشعارات','warn');return;}
+  if(Notification.permission==='granted'){
+    localStorage.setItem(mgrNotifyKey(shortId),'1');
+    mgrNotifyState.enabled=true;
+    updateMgrNotifyBtn();
+    toast('تم تفعيل التذكير','ok');
+  } else if(Notification.permission==='denied'){
+    toast('الإشعارات ممنوعة من إعدادات المتصفح، فعّلها من هناك الأول','warn');
+  } else {
+    Notification.requestPermission().then(function(perm){
+      if(perm==='granted'){
+        localStorage.setItem(mgrNotifyKey(shortId),'1');
+        mgrNotifyState.enabled=true;
+        updateMgrNotifyBtn();
+        toast('تم تفعيل التذكير','ok');
+      } else {
+        toast('محتاج تسمح بالإشعارات عشان الميزة دي تشتغل','warn');
+      }
+    });
+  }
+});
+
 function _initApp(){
   try{
   applyTheme();
@@ -1115,6 +1202,7 @@ function _initApp(){
       var todayLocked=lnk.used_date===todayISO;
       var stationId=Number((shortId.split('_')[0]))||null;
       function boot(openDates){
+        setupMgrReminder(shortId,lnk.station_name,todayLocked);
         if(todayLocked && !openDates.length){showLocked();return;}
         showMgr({
           stationName:lnk.station_name,
@@ -1320,6 +1408,23 @@ function loadDash(){
     var attendPct=totalAll?Math.round(totalPresent/totalAll*100):0;
     var barColor=attendPct>=90?'var(--green)':attendPct>=70?'var(--gold)':'var(--red)';
 
+    function finishRender(staleMap){
+    staleMap=staleMap||{};
+    var summaryHTML=
+      '<div class="dash-summary-card">'+
+        '<div class="dash-summary-row">'+
+          '<div class="dash-summary-num">'+reported.length+' <span style="color:var(--muted);font-weight:600;font-size:15px">من '+stations.length+'</span></div>'+
+          '<div class="dash-summary-lbl">محطة سجّلت النهاردة</div>'+
+        '</div>'+
+        '<div class="dash-summary-bar"><div class="dash-summary-bar-fill" style="width:'+(stations.length?Math.round(reported.length/stations.length*100):0)+'%"></div></div>'+
+      '</div>';
+
+    var staleNames=Object.keys(staleMap).filter(function(n){return staleMap[n]>=2;});
+    var staleHTML=staleNames.length?
+      '<div class="dash-stale-card">&#9888;&#65039; <b>'+staleNames.length+' محطة ساكنة</b> من أكتر من يوم: '+
+        staleNames.map(function(n){return n+' ('+staleMap[n]+' يوم)';}).join('، ')+
+      '</div>':'';
+
     var reportedHTML=reported.map(function(s){
       var rec=data.find(function(r){return r.station===s.name;});
       return '<div class="dash-station-row done">'+
@@ -1335,12 +1440,16 @@ function loadDash(){
     }).join('');
 
     var pendingHTML=pending.map(function(s){
+      var staleDays=staleMap[s.name]||0;
       return '<div class="dash-station-row pending">'+
         '<div>'+
           '<div class="dash-station-name">'+s.name+'</div>'+
           '<div class="dash-station-time">المدير: '+s.manager+'</div>'+
         '</div>'+
-        '<div style="color:var(--red);font-weight:700;font-size:12px">❌ لم يسجّل</div>'+
+        '<div style="text-align:left">'+
+          '<div style="color:var(--red);font-weight:700;font-size:12px">❌ لم يسجّل</div>'+
+          (staleDays>=2?'<div style="color:var(--gold);font-weight:700;font-size:11px">&#9888;&#65039; ساكنة '+staleDays+' يوم</div>':'')+
+        '</div>'+
       '</div>';
     }).join('');
 
@@ -1348,6 +1457,7 @@ function loadDash(){
     var timeStr=now.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
     el.innerHTML=
       '<button class="dash-refresh" onclick="loadDash()">&#8635; تحديث — آخر تحديث: '+timeStr+'</button>'+
+      summaryHTML+staleHTML+
       '<div class="dash-grid">'+
         '<div class="dash-card dc-green"><div class="dash-ic">&#9989;</div>'+
           '<div class="dash-num" style="color:var(--green)">'+reported.length+'</div>'+
@@ -1382,6 +1492,31 @@ function loadDash(){
         '</div>'+
         '<div id="reportedSecBody">'+reportedHTML+'</div>':'');
     applyReportedSecState();
+    } // end finishRender
+
+    if(!pending.length){finishRender({});return;}
+    // نحسب لكل محطة معلقة عدد الأيام المتتالية اللي فاتت من غير تسجيل (آخر 7 أيام قبل النهاردة)
+    var weekAgo=new Date(todayISO+'T00:00:00'); weekAgo.setDate(weekAgo.getDate()-7);
+    var weekAgoISO=localISO(weekAgo);
+    sbGet('attendance','report_date_iso=gte.'+weekAgoISO+'&report_date_iso=lt.'+todayISO+'&select=station,report_date_iso&limit=3000',function(pastRecs){
+      var datesByStation={};
+      (pastRecs||[]).forEach(function(r){
+        if(!datesByStation[r.station])datesByStation[r.station]=new Set();
+        datesByStation[r.station].add(r.report_date_iso);
+      });
+      var staleMap={};
+      pending.forEach(function(s){
+        var streak=1; // النهاردة نفسها بتتحسب كيوم أول من غياب التسجيل
+        for(var i=1;i<=7;i++){
+          var d=new Date(todayISO+'T00:00:00'); d.setDate(d.getDate()-i);
+          var iso=localISO(d);
+          if(datesByStation[s.name]&&datesByStation[s.name].has(iso))break;
+          streak++;
+        }
+        staleMap[s.name]=streak;
+      });
+      finishRender(staleMap);
+    });
   });
 }
 var dashReportedCollapsed=false; // الحالة الافتراضية: مفتوح، وبتفضل محفوظة طول الجلسة حتى بعد كل تحديث
@@ -2182,6 +2317,7 @@ function showMgrForm(info,lockKey,openDates,todayLocked,targetDate){
           // إرسال تقرير اليوم العادي: نقفل الرابط زي ما هو دايماً
           sbPatch('manager_links','id=eq.'+encodeURIComponent(lockKey),{used_date:todayISO});
           todayLocked=true;
+          mgrNotifyState.todayLocked=true;
           var remainingAfterToday=openDates.slice();
           if(!remainingAfterToday.length){
             // خلاص كل حاجة اتقفلت، مفيش أيام سابقة تانية مفتوحة
