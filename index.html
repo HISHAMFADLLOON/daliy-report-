@@ -391,9 +391,11 @@ select.sel:focus{border-color:var(--blue);}
 /* TOAST */
 .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(70px);
   padding:13px 28px;border-radius:30px;font-weight:900;font-size:14px;z-index:500;
-  transition:transform .3s cubic-bezier(.34,1.56,.64,1);
+  max-width:88vw;text-align:center;line-height:1.6;
+  opacity:0;pointer-events:none;
+  transition:transform .3s cubic-bezier(.34,1.56,.64,1),opacity .3s;
   box-shadow:0 8px 28px var(--shadow);}
-.toast.show{transform:translateX(-50%) translateY(0);}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1;pointer-events:auto;}
 .toast.ok{background:linear-gradient(135deg,#10b981,#059669);color:#fff;}
 .toast.warn{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;}
 .toast.err{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;}
@@ -3940,10 +3942,12 @@ function renderStatsChart(labels,data){
 }
 
 // ── TOAST ──
+var _toastTimer=null;
 function toast(msg,type){
   var t=document.getElementById('toast');
+  if(_toastTimer)clearTimeout(_toastTimer);
   t.textContent=msg;t.className='toast show '+(type||'ok');
-  setTimeout(function(){t.classList.remove('show');},2600);
+  _toastTimer=setTimeout(function(){t.classList.remove('show');},2600);
 }
 
 // ── CONFIRM MODAL (replaces native confirm()) ──
