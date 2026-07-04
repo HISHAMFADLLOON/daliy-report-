@@ -1795,11 +1795,28 @@ window._addOpenDate=function(sid){
   if(val>=todayISO){toast('لازم يكون تاريخ سابق (قبل النهاردة)','warn');return;}
   s.open_dates=s.open_dates||[];
   if(s.open_dates.indexOf(val)!==-1){toast('اليوم ده مفتوح بالفعل','warn');return;}
+  // تحقق أولاً: هل المحطة دي سجلت اليوم ده بالفعل؟ لو آه، نأكد قبل ما نفتحه (منعاً للتسجيل المكرر)
+  sbGet('attendance','station=eq.'+encodeURIComponent(s.name)+'&report_date_iso=eq.'+val+'&select=report_date,report_time',function(rows){
+    if(rows&&rows.length){
+      confirmModal('اليوم ده متسجل بالفعل!',
+        'محطة "'+s.name+'" أصلاً سجّلت يوم '+arDayLabel(val)+' بتاريخ '+rows[0].report_date+' الساعة '+rows[0].report_time+
+        '.<br><br>لو فتحته تاني، المدير هيقدر يسجل حضور من جديد لنفس اليوم، وهيتسجل <b>سجل مكرر</b> جنب اللي موجود مش بدل منه.<br><br>متأكد عايز تفتحه برضه؟',
+        function(){ doOpenDate(s,val); },
+        {okLabel:'افتحه برضه',okBlue:false}
+      );
+    } else {
+      doOpenDate(s,val);
+    }
+  });
+};
+function doOpenDate(s,val){
+  s.open_dates=s.open_dates||[];
+  if(s.open_dates.indexOf(val)!==-1)return;
   s.open_dates.push(val);
   saveStation(s); renderSt();
   logAudit('فتح يوم سابق للتسجيل',s.name+' - '+val);
   toast('تم فتح يوم '+arDayLabel(val)+' لمدير '+s.name,'ok');
-};
+}
 window._removeOpenDate=function(sid,dateIso){
   var s=stations.find(function(x){return x.id===sid;});
   if(!s)return;
@@ -1839,21 +1856,31 @@ function bulkOpenDate(){
   var selectedIds=[];
   el.querySelectorAll('input[type=checkbox]:checked').forEach(function(cb){selectedIds.push(Number(cb.value));});
   if(!selectedIds.length){toast('اختار محطة واحدة على الأقل','warn');return;}
-  var opened=0,skipped=0;
-  selectedIds.forEach(function(sid){
-    var s=stations.find(function(x){return x.id===sid;});
-    if(!s)return;
-    s.open_dates=s.open_dates||[];
-    if(s.open_dates.indexOf(val)!==-1){skipped++;return;}
-    s.open_dates.push(val);
-    saveStation(s);
-    opened++;
+  var selectedStations=selectedIds.map(function(sid){return stations.find(function(x){return x.id===sid;});}).filter(Boolean);
+  var names=selectedStations.map(function(s){return s.name;});
+  var btn=document.getElementById('bulkOpenBtn');
+  btn.disabled=true;btn.textContent='جاري التحقق...';
+  // تحقق أولاً: أي محطة من المختارة سجّلت اليوم ده بالفعل؟ (منعاً لتسجيل مكرر)
+  sbGet('attendance','report_date_iso=eq.'+val+'&station=in.('+names.map(encodeURIComponent).join(',')+')&select=station',function(existingRecs){
+    btn.disabled=false;btn.textContent='فتح للمحطات المختارة';
+    var alreadyReported={};
+    (existingRecs||[]).forEach(function(r){alreadyReported[r.station]=true;});
+    var opened=0,skipped=0,blocked=0;
+    selectedStations.forEach(function(s){
+      if(alreadyReported[s.name]){blocked++;return;}
+      s.open_dates=s.open_dates||[];
+      if(s.open_dates.indexOf(val)!==-1){skipped++;return;}
+      s.open_dates.push(val);
+      saveStation(s);
+      opened++;
+    });
+    renderSt();
+    logAudit('فتح يوم سابق لعدة محطات',arDayLabel(val)+' - '+opened+' محطة');
+    var msg='تم فتح '+arDayLabel(val)+' لـ '+opened+' محطة';
+    if(skipped)msg+='، '+skipped+' كانت مفتوحة بالفعل';
+    if(blocked)msg+='، و'+blocked+' اتجاهلت لأنها سجّلت اليوم ده بالفعل';
+    toast(msg,opened?'ok':'warn');
   });
-  renderSt();
-  logAudit('فتح يوم سابق لعدة محطات',arDayLabel(val)+' - '+opened+' محطة');
-  if(opened&&!skipped)toast('تم فتح '+arDayLabel(val)+' لـ '+opened+' محطة','ok');
-  else if(opened&&skipped)toast('تم فتح '+opened+' محطة، و'+skipped+' كانت مفتوحة بالفعل','ok');
-  else toast('كل المحطات المختارة كان اليوم ده مفتوح عندها بالفعل','warn');
 }
 window._openMergeSel=function(sid){
   var s=stations.find(function(s){return s.id===sid;});
