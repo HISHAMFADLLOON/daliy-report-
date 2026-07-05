@@ -1708,16 +1708,30 @@ window._editMgr=function(sid){
   confirmModal('تعديل اسم المدير','',function(){
     var input=document.getElementById('editMgrInput');
     var val=input?input.value.trim():'';
+    var applyOld=document.getElementById('editMgrApplyOld');
+    var applyToOld=applyOld&&applyOld.checked;
     if(!val){toast('اكتب اسم المدير','warn');return;}
     if(val===oldName)return;
     s.manager=val;
     saveStation(s); renderSt();
-    logAudit('تعديل اسم المدير',s.name+': '+oldName+' &larr; '+val);
-    toast('تم تعديل اسم المدير','ok');
+    if(applyToOld){
+      sbPatch('attendance','station=eq.'+encodeURIComponent(s.name)+'&manager=eq.'+encodeURIComponent(oldName),{manager:val})
+        .then(function(){
+          logAudit('تعديل اسم المدير (مع السجلات القديمة)',s.name+': '+oldName+' &larr; '+val);
+          toast('تم تعديل اسم المدير في المحطة وكل سجلاته القديمة','ok');
+        });
+    } else {
+      logAudit('تعديل اسم المدير',s.name+': '+oldName+' &larr; '+val);
+      toast('تم تعديل اسم المدير (من دلوقتي فصاعداً بس)','ok');
+    }
   },{
     okLabel:'حفظ',okBlue:true,focusId:'editMgrInput',
     extraHtml:'<input type="text" id="editMgrInput" class="login-input" style="margin-top:10px;text-align:center" value="'+
-      oldName.replace(/"/g,'&quot;')+'" placeholder="اسم المدير">'
+      oldName.replace(/"/g,'&quot;')+'" placeholder="اسم المدير">'+
+      '<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12.5px;color:var(--muted);cursor:pointer;text-align:right">'+
+        '<input type="checkbox" id="editMgrApplyOld" style="width:16px;height:16px;flex:0 0 auto;accent-color:var(--blue)">'+
+        '<span>غيّر الاسم في سجلات الحضور القديمة كمان (يفيد في تجميع الإحصائيات تحت اسم واحد، من غير ما يتغير أي تاريخ أو وقت)</span>'+
+      '</label>'
   });
 };
 window._editEmp=function(sid,idx){
@@ -1727,17 +1741,34 @@ window._editEmp=function(sid,idx){
   confirmModal('تعديل اسم الموظف','',function(){
     var input=document.getElementById('editEmpInput');
     var val=input?input.value.trim():'';
+    var applyOld=document.getElementById('editEmpApplyOld');
+    var applyToOld=applyOld&&applyOld.checked;
     if(!val){toast('اكتب اسم الموظف','warn');return;}
-    if(val===oldName)return;
     if(s.employees.indexOf(val)!==-1){toast('الاسم موجود بالفعل','warn');return;}
+    if(val===oldName)return;
     s.employees[idx]=val;
     saveStation(s); renderSt();
-    logAudit('تعديل اسم موظف',s.name+': '+oldName+' &larr; '+val);
-    toast('تم تعديل اسم الموظف','ok');
+    if(applyToOld){
+      sbRpc('rename_employee_in_attendance',{p_station:s.name,p_old_name:oldName,p_new_name:val},function(count,err){
+        if(err){
+          toast('اتغير الاسم في المحطة، لكن فشل تعديل السجلات القديمة','warn');
+          return;
+        }
+        logAudit('تعديل اسم موظف (مع السجلات القديمة)',s.name+': '+oldName+' &larr; '+val+' - '+(count||0)+' سجل');
+        toast('تم تعديل الاسم في '+(count||0)+' سجل حضور قديم كمان','ok');
+      });
+    } else {
+      logAudit('تعديل اسم موظف',s.name+': '+oldName+' &larr; '+val);
+      toast('تم تعديل اسم الموظف (من دلوقتي فصاعداً بس)','ok');
+    }
   },{
     okLabel:'حفظ',okBlue:true,focusId:'editEmpInput',
     extraHtml:'<input type="text" id="editEmpInput" class="login-input" style="margin-top:10px;text-align:center" value="'+
-      oldName.replace(/"/g,'&quot;')+'" placeholder="اسم الموظف">'
+      oldName.replace(/"/g,'&quot;')+'" placeholder="اسم الموظف">'+
+      '<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12.5px;color:var(--muted);cursor:pointer;text-align:right">'+
+        '<input type="checkbox" id="editEmpApplyOld" style="width:16px;height:16px;flex:0 0 auto;accent-color:var(--blue)">'+
+        '<span>غيّر الاسم في سجلات الحضور القديمة كمان (يفيد في تجميع الإحصائيات تحت اسم واحد، من غير ما يتغير أي تاريخ أو وقت)</span>'+
+      '</label>'
   });
 };
 
