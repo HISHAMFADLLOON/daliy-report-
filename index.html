@@ -196,6 +196,9 @@ input[type=date]:focus{border-color:var(--blue);}
 .open-date-pill span.od-x{cursor:pointer;color:var(--red);font-weight:900;
   width:18px;height:18px;display:flex;align-items:center;justify-content:center;
   background:rgba(239,68,68,.12);border-radius:50%;}
+.edit-unlock-pill{display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,.1);
+  border:1px solid rgba(245,158,11,.25);color:var(--gold);border-radius:20px;
+  padding:4px 6px 4px 12px;font-size:12px;font-weight:700;}
 
 /* LINK CARD */
 .lnk-card{background:var(--grad-card);border:1.5px solid var(--border);border-radius:18px;
@@ -1034,7 +1037,8 @@ function saveStation(s){
   fetch(SB_URL+'/rest/v1/stations',{method:'POST',headers:h,body:JSON.stringify({
     id:s.id,name:s.name,manager:s.manager,employees:s.employees,
     manager_code:s.manager_code||'',manager_group:s.manager_group||null,
-    mgr_visible:s.mgr_visible!==false,open_dates:s.open_dates||[],updated_at:new Date().toISOString()
+    mgr_visible:s.mgr_visible!==false,open_dates:s.open_dates||[],
+    edit_unlock_dates:s.edit_unlock_dates||[],updated_at:new Date().toISOString()
   })}).then(function(){updateManagerLink(s);}).catch(function(){});
 }
 function updateManagerLink(s){
@@ -1203,9 +1207,9 @@ function _initApp(){
       setupManagerAppManifest(shortId, lnk.station_name); // تحديث الاسم في التطبيق باسم المحطة الصحيح بعد ما يوصل
       var todayLocked=lnk.used_date===todayISO;
       var stationId=Number((shortId.split('_')[0]))||null;
-      function boot(openDates){
+      function boot(openDates,editDates){
         setupMgrReminder(shortId,lnk.station_name,todayLocked);
-        if(todayLocked && !openDates.length){showLocked();return;}
+        if(todayLocked && !openDates.length && !editDates.length){showLocked();return;}
         showMgr({
           stationName:lnk.station_name,
           managerName:lnk.manager_name,
@@ -1213,15 +1217,16 @@ function _initApp(){
           managerCode:lnk.manager_code||'',
           showManager:lnk.show_manager!==false,
           stationId:stationId
-        },shortId,openDates,todayLocked);
+        },shortId,openDates,todayLocked,editDates);
       }
       if(stationId){
-        sbGet('stations','id=eq.'+stationId+'&select=open_dates',function(sRows){
+        sbGet('stations','id=eq.'+stationId+'&select=open_dates,edit_unlock_dates',function(sRows){
           var od=(sRows&&sRows.length&&Array.isArray(sRows[0].open_dates))?sRows[0].open_dates.slice().sort():[];
-          boot(od);
+          var ed=(sRows&&sRows.length&&Array.isArray(sRows[0].edit_unlock_dates))?sRows[0].edit_unlock_dates.slice().sort():[];
+          boot(od,ed);
         });
       } else {
-        boot([]);
+        boot([],[]);
       }
     });
   } else {
@@ -1672,6 +1677,7 @@ function renderSt(){
             '</div></div>'+
           '<div style="margin-top:13px">'+mergeBoxHTML(s)+'</div>'+
           '<div style="margin-top:13px">'+openDatesBoxHTML(s)+'</div>'+
+          '<div style="margin-top:13px">'+editUnlockBoxHTML(s)+'</div>'+
           '<div style="margin-top:13px">'+
             '<div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:8px">كود المدير السري (اختياري &ndash; بدونه يدخل المدير بدون كود)</div>'+
             '<div class="row">'+
@@ -1856,6 +1862,50 @@ window._removeOpenDate=function(sid,dateIso){
   s.open_dates=(s.open_dates||[]).filter(function(d){return d!==dateIso;});
   saveStation(s); renderSt();
   logAudit('قفل يوم سابق مفتوح',s.name+' - '+dateIso);
+};
+
+// ── السماح للمدير يعدّل يوم اتسجل بالفعل (إذن لمرة واحدة) ──
+function editUnlockBoxHTML(s){
+  var dates=(s.edit_unlock_dates||[]).slice().sort();
+  var pillsHTML=dates.length?dates.map(function(d){
+    return '<span class="edit-unlock-pill">&#128275; '+arDayLabel(d)+
+      '<span class="od-x" onclick="window._removeEditUnlock('+s.id+',\''+d+'\')">&#10005;</span></span>';
+  }).join(''):'<span style="font-size:12px;color:var(--muted)">مفيش إذن تعديل مفتوح دلوقتي</span>';
+  return '<div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:8px">'+
+      '&#128275; السماح للمدير يعدّل يوم اتسجل بالفعل (إذن لمرة واحدة، بيتقفل تلقائياً بعد التعديل)</div>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">'+pillsHTML+'</div>'+
+    '<div class="row">'+
+      '<input type="date" id="euIn_'+s.id+'" max="'+prevDayISO(todayISO)+'">'+
+      '<button class="btn btn-ghost" style="border-color:rgba(245,158,11,.3);color:var(--gold)" onclick="window._addEditUnlock('+s.id+')">سماح</button>'+
+    '</div>';
+}
+window._addEditUnlock=function(sid){
+  var s=stations.find(function(x){return x.id===sid;});
+  if(!s)return;
+  var input=document.getElementById('euIn_'+sid);
+  var val=input?input.value:'';
+  if(!val){toast('اختار تاريخ الأول','warn');return;}
+  if(val>=todayISO){toast('لازم يكون تاريخ سابق (قبل النهاردة)','warn');return;}
+  s.edit_unlock_dates=s.edit_unlock_dates||[];
+  if(s.edit_unlock_dates.indexOf(val)!==-1){toast('مسموح له بالتعديل في اليوم ده بالفعل','warn');return;}
+  // تحقق إن فيه أصلاً تقرير مسجل في اليوم ده، وإلا مفيش معنى للتعديل
+  sbGet('attendance','station=eq.'+encodeURIComponent(s.name)+'&report_date_iso=eq.'+val+'&select=id',function(rows){
+    if(!rows||!rows.length){
+      toast('لا يوجد تقرير مسجل في يوم '+arDayLabel(val)+' لهذه المحطة أصلاً','warn');
+      return;
+    }
+    s.edit_unlock_dates.push(val);
+    saveStation(s); renderSt();
+    logAudit('سماح للمدير بالتعديل',s.name+' - '+val);
+    toast('اتسمح لمدير '+s.name+' يعدّل يوم '+arDayLabel(val),'ok');
+  });
+};
+window._removeEditUnlock=function(sid,dateIso){
+  var s=stations.find(function(x){return x.id===sid;});
+  if(!s)return;
+  s.edit_unlock_dates=(s.edit_unlock_dates||[]).filter(function(d){return d!==dateIso;});
+  saveStation(s); renderSt();
+  logAudit('إلغاء إذن تعديل',s.name+' - '+dateIso);
 };
 
 // ── فتح تسجيل يوم سابق لعدة محطات دفعة واحدة ──
@@ -2084,8 +2134,9 @@ var STATUSES=[
   {key:'انقطاع',cls:'sb-a',card:'s-abs',    note:true}
 ];
 
-function showMgr(info,lockKey,openDates,todayLocked){
+function showMgr(info,lockKey,openDates,todayLocked,editDates){
   openDates=openDates||[];
+  editDates=editDates||[];
   document.getElementById('mgrTitle').textContent=info.stationName;
   document.getElementById('mgrSub').textContent='المدير: '+info.managerName;
   document.title=info.stationName+' - تسجيل الحضور';
@@ -2110,7 +2161,7 @@ function showMgr(info,lockKey,openDates,todayLocked){
         return;
       }
       if(entered===info.managerCode){
-        showMgrForm(info,lockKey,openDates,todayLocked);
+        showMgrForm(info,lockKey,openDates,todayLocked,undefined,editDates);
       } else {
         document.getElementById('mgrCodeErr').textContent='الكود السري غلط، حاول تاني';
         document.getElementById('mgrCodeInput').value='';
@@ -2126,40 +2177,63 @@ function showMgr(info,lockKey,openDates,todayLocked){
     setTimeout(function(){document.getElementById('mgrCodeInput').focus();},100);
     return;
   }
-  showMgrForm(info,lockKey,openDates,todayLocked);
+  showMgrForm(info,lockKey,openDates,todayLocked,undefined,editDates);
 }
 
 var mgrIdleDestroy=null;
-function showMgrForm(info,lockKey,openDates,todayLocked,targetDate){
+function showMgrForm(info,lockKey,openDates,todayLocked,targetDate,editDates,editRecord){
   openDates=openDates||[];
-  // تحديد اليوم المستهدف: لو محددش، افتراضياً اليوم لو مش مقفول، وإلا أول يوم سابق مفتوح
+  editDates=editDates||[];
+  // تحديد اليوم المستهدف: لو محددش، افتراضياً اليوم لو مش مقفول، وإلا أول يوم سابق مفتوح (تسجيل أو تعديل)
   if(!targetDate){
-    targetDate=(!todayLocked)?todayISO:(openDates[0]||todayISO);
+    targetDate=(!todayLocked)?todayISO:(openDates[0]||editDates[0]||todayISO);
   }
   var isToday=targetDate===todayISO;
+  var isEditMode=!isToday && editDates.indexOf(targetDate)!==-1;
+
+  // في وضع التعديل: لازم نجيب التقرير القديم الأول قبل ما نعرض أي فورم
+  if(isEditMode && !editRecord){
+    document.getElementById('mgrBody').innerHTML='<div class="loading">&#9203; جاري تحميل التقرير...</div>';
+    sbGet('attendance','station=eq.'+encodeURIComponent(info.stationName)+'&report_date_iso=eq.'+targetDate+'&select=*&order=created_at.desc&limit=1',function(rows){
+      if(!rows||!rows.length){
+        toast('التقرير غير موجود، جرب تاني','err');
+        showMgrForm(info,lockKey,openDates,todayLocked,undefined,editDates);
+        return;
+      }
+      showMgrForm(info,lockKey,openDates,todayLocked,targetDate,editDates,rows[0]);
+    });
+    return;
+  }
 
   // إيقاف أي idle timer سابق (لو الصفحة دي اتفتحت قبل كده) قبل بدء جديد، لمنع التكرار
   if(mgrIdleDestroy){mgrIdleDestroy();mgrIdleDestroy=null;}
 
   var people=info.showManager===false?info.employees.slice():
     (info.employees.indexOf(info.managerName)!==-1?info.employees:[info.managerName].concat(info.employees));
+  // في وضع التعديل، نضيف أي اسم كان موجود في التقرير القديم لكن اتشال من قايمة المحطة بعد كده
+  if(isEditMode&&editRecord){
+    (editRecord.employees||[]).forEach(function(e){if(people.indexOf(e.name)===-1)people.push(e.name);});
+  }
   var total=people.length;
   var att={};
   var dateStr=isToday?
     new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'}):
-    arDayLabel(targetDate)+' (تسجيل متأخر)';
+    arDayLabel(targetDate)+(isEditMode?' (تعديل تقرير)':' (تسجيل متأخر)');
 
-  // ── تابات اختيار اليوم (لو فيه أيام سابقة مفتوحة) ──
+  // ── تابات اختيار اليوم (لو فيه أيام سابقة مفتوحة للتسجيل أو للتعديل) ──
   var tabsHTML='';
-  if(openDates.length){
-    var tabs=[{key:todayISO,label:'اليوم',disabled:todayLocked}].concat(
-      openDates.map(function(d){return {key:d,label:arDayLabel(d),disabled:false};})
+  if(openDates.length||editDates.length){
+    var tabs=[{key:todayISO,label:'اليوم',disabled:todayLocked,edit:false}].concat(
+      openDates.map(function(d){return {key:d,label:arDayLabel(d),disabled:false,edit:false};})
+    ).concat(
+      editDates.map(function(d){return {key:d,label:'&#9999;&#65039; '+arDayLabel(d),disabled:false,edit:true};})
     );
     tabsHTML='<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:12px">'+
       tabs.map(function(t){
-        var active=t.key===targetDate;
+        var active=t.key===targetDate&&t.edit===isEditMode;
         var style=active?
-          'background:var(--grad-main);color:#fff;border-color:transparent':
+          (t.edit?'background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border-color:transparent':
+                  'background:var(--grad-main);color:#fff;border-color:transparent'):
           (t.disabled?'opacity:.45;text-decoration:line-through':'');
         return '<button '+(t.disabled?'disabled':'onclick="window._mgrSwitchDay(\''+t.key+'\')"')+
           ' style="flex:0 0 auto;padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;'+
@@ -2168,7 +2242,9 @@ function showMgrForm(info,lockKey,openDates,todayLocked,targetDate){
       }).join('')+
     '</div>';
   }
-  window._mgrSwitchDay=function(d){showMgrForm(info,lockKey,openDates,todayLocked,d);};
+  window._mgrSwitchDay=function(d){showMgrForm(info,lockKey,openDates,todayLocked,d,editDates);};
+
+
 
   function buildCard(name,isMgr){
     var btns=STATUSES.map(function(s){
@@ -2205,7 +2281,7 @@ function showMgrForm(info,lockKey,openDates,todayLocked,targetDate){
         '<input type="text" id="newPersonInput" placeholder="&#10133; اضافة شخص غير موجود بالقائمة">'+
         '<button class="btn btn-blue" id="addPersonBtn">اضافة</button>'+
       '</div>'+
-      '<button class="sub-btn" id="subBtn">&#10003; ارسال التقرير</button>'+
+      '<button class="sub-btn" id="subBtn">'+(isEditMode?'&#128190; حفظ التعديل':'&#10003; ارسال التقرير')+'</button>'+
     '</div>';
 
   window._mAtt=function(name,status){
@@ -2223,6 +2299,15 @@ function showMgrForm(info,lockKey,openDates,todayLocked,targetDate){
     document.getElementById('dc').textContent=done;
     document.getElementById('pf').style.width=Math.round(done/total*100)+'%';
   };
+
+  // في وضع التعديل: نعبّي الحالات والملاحظات القديمة تلقائياً بدل ما تبدأ فاضية
+  if(isEditMode&&editRecord){
+    (editRecord.employees||[]).forEach(function(e){
+      window._mAtt(e.name,e.status);
+      var noteEl=document.getElementById('pn_'+CSS.escape(e.name));
+      if(noteEl&&e.note)noteEl.value=e.note;
+    });
+  }
 
   function addPerson(){
     var input=document.getElementById('newPersonInput');
@@ -2267,7 +2352,7 @@ function showMgrForm(info,lockKey,openDates,todayLocked,targetDate){
     if(mgrClockTimer){clearInterval(mgrClockTimer);mgrClockTimer=null;}
     if(mgrIdleDestroy){mgrIdleDestroy();mgrIdleDestroy=null;}
     toast('تم قفل الصفحة لعدم الاستخدام، ادخل الكود تاني','warn');
-    showMgr(info,lockKey,openDates,todayLocked);
+    showMgr(info,lockKey,openDates,todayLocked,editDates);
   });
 
   document.getElementById('subBtn').addEventListener('click',function(){
@@ -2317,7 +2402,7 @@ function showMgrForm(info,lockKey,openDates,todayLocked,targetDate){
 
     // زرار تعديل - يرجع لشاشة التسجيل
     document.getElementById('backBtn').addEventListener('click',function(){
-      showMgrForm(info,lockKey,openDates,todayLocked,targetDate);
+      showMgrForm(info,lockKey,openDates,todayLocked,targetDate,editDates,editRecord);
     });
 
     // زرار تأكيد الإرسال
@@ -2343,11 +2428,14 @@ function showMgrForm(info,lockKey,openDates,todayLocked,targetDate){
         var ne=document.getElementById('pn_'+CSS.escape(n));
         return {name:n,status:att[n],note:(ne&&att[n]!=='حاضر')?ne.value.trim():''};
       });
-      sbPost('attendance',{
-        station:info.stationName,manager:info.managerName,
-        report_date:date,report_date_iso:targetDate,
-        report_time:time+(isToday?'':' (تسجيل متأخر)'),employees:emps
-      }).then(function(ok){
+      var saveAction=isEditMode?
+        sbPatch('attendance','id=eq.'+editRecord.id,{employees:emps,report_time:(editRecord.report_time||'')+' (اتعدل الساعة '+time+')'}):
+        sbPost('attendance',{
+          station:info.stationName,manager:info.managerName,
+          report_date:date,report_date_iso:targetDate,
+          report_time:time+(isToday?'':' (تسجيل متأخر)'),employees:emps
+        });
+      saveAction.then(function(ok){
         if(!ok){
           // الحفظ فشل: لا نقفل الرابط ولا نعرض نجاح، ونعطي فرصة إعادة المحاولة
           btn.disabled=false;btn.textContent='✓ تأكيد الإرسال';
@@ -2366,21 +2454,42 @@ function showMgrForm(info,lockKey,openDates,todayLocked,targetDate){
         // الحفظ نجح فعلياً
         var groups={};STATUSES.forEach(function(s){groups[s.key]=[];});
         emps.forEach(function(e){var lbl=e.note?e.name+'('+e.note+')':e.name;if(groups[e.status])groups[e.status].push(lbl);});
-        var msg=(isToday?'تقرير حضور':'تقرير حضور متأخر')+'\n'+info.stationName+' - '+info.managerName+'\n'+date+' - '+time+'\n---\n';
+        var msg=(isEditMode?'تعديل تقرير حضور':(isToday?'تقرير حضور':'تقرير حضور متأخر'))+'\n'+info.stationName+' - '+info.managerName+'\n'+date+' - '+time+'\n---\n';
         STATUSES.forEach(function(s){if(groups[s.key].length)msg+=s.key+': '+groups[s.key].join(', ')+'\n';});
         fetch('https://api.telegram.org/bot'+BOT_TOKEN+'/sendMessage',{
           method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({chat_id:CHAT_ID,text:msg})
         }).catch(function(){});
 
-        if(isToday){
+        if(isEditMode){
+          // تعديل تقرير سابق: نشيل الإذن من قايمة أذونات التعديل بس (استخدام لمرة واحدة)، من غير ما نلمس أي حاجة تانية
+          var newEditDates=editDates.filter(function(d){return d!==targetDate;});
+          if(info.stationId){
+            sbPatch('stations','id=eq.'+info.stationId,{edit_unlock_dates:newEditDates}).catch(function(){});
+          }
+          toast('تم حفظ تعديل يوم '+arDayLabel(targetDate)+' بنجاح','ok');
+          if(newEditDates.length){
+            showMgrForm(info,lockKey,openDates,todayLocked,newEditDates[0],newEditDates);
+          } else if(openDates.length){
+            showMgrForm(info,lockKey,openDates,todayLocked,openDates[0],newEditDates);
+          } else if(!todayLocked){
+            showMgrForm(info,lockKey,openDates,todayLocked,todayISO,newEditDates);
+          } else {
+            if(mgrClockTimer){clearInterval(mgrClockTimer);mgrClockTimer=null;}
+            if(mgrIdleDestroy){mgrIdleDestroy();mgrIdleDestroy=null;}
+            document.getElementById('mgrBody').innerHTML=
+              '<div class="cs"><div class="cs-icon">&#10003;</div>'+
+              '<div class="cs-title">تم حفظ كل التعديلات</div>'+
+              '<div class="cs-sub">'+info.stationName+'<br>مفيش تعديلات تانية مطلوبة دلوقتي</div></div>';
+          }
+        } else if(isToday){
           // إرسال تقرير اليوم العادي: نقفل الرابط زي ما هو دايماً
           sbPatch('manager_links','id=eq.'+encodeURIComponent(lockKey),{used_date:todayISO});
           todayLocked=true;
           mgrNotifyState.todayLocked=true;
           var remainingAfterToday=openDates.slice();
-          if(!remainingAfterToday.length){
-            // خلاص كل حاجة اتقفلت، مفيش أيام سابقة تانية مفتوحة
+          if(!remainingAfterToday.length&&!editDates.length){
+            // خلاص كل حاجة اتقفلت، مفيش أيام سابقة تانية مفتوحة أو محتاجة تعديل
             if(mgrClockTimer){clearInterval(mgrClockTimer);mgrClockTimer=null;}
             if(mgrIdleDestroy){mgrIdleDestroy();mgrIdleDestroy=null;}
             document.getElementById('mgrBody').innerHTML=
@@ -2389,7 +2498,7 @@ function showMgrForm(info,lockKey,openDates,todayLocked,targetDate){
               '<div class="cs-sub">'+info.stationName+'<br>تم الحفظ بنجاح<br>هذا الرابط مقفول اليوم</div></div>';
           } else {
             toast('تم إرسال تقرير اليوم بنجاح','ok');
-            showMgrForm(info,lockKey,remainingAfterToday,true,remainingAfterToday[0]);
+            showMgrForm(info,lockKey,remainingAfterToday,true,remainingAfterToday[0]||editDates[0],editDates);
           }
         } else {
           // تسجيل متأخر ليوم سابق: نشيل اليوم ده من قايمة الأيام المفتوحة بس، من غير ما نلمس رابط اليوم
@@ -2399,9 +2508,11 @@ function showMgrForm(info,lockKey,openDates,todayLocked,targetDate){
           }
           toast('تم تسجيل حضور يوم '+arDayLabel(targetDate)+' بنجاح','ok');
           if(newOpenDates.length){
-            showMgrForm(info,lockKey,newOpenDates,todayLocked,newOpenDates[0]);
+            showMgrForm(info,lockKey,newOpenDates,todayLocked,newOpenDates[0],editDates);
+          } else if(editDates.length){
+            showMgrForm(info,lockKey,newOpenDates,todayLocked,editDates[0],editDates);
           } else if(!todayLocked){
-            showMgrForm(info,lockKey,newOpenDates,todayLocked,todayISO);
+            showMgrForm(info,lockKey,newOpenDates,todayLocked,todayISO,editDates);
           } else {
             if(mgrClockTimer){clearInterval(mgrClockTimer);mgrClockTimer=null;}
             if(mgrIdleDestroy){mgrIdleDestroy();mgrIdleDestroy=null;}
@@ -2963,16 +3074,25 @@ window._editRec=function(id){
   document.getElementById('editOvSub').textContent=r.station+' - '+r.manager+' - '+r.report_date+' '+r.report_time;
   var optsHTML=STATUSES.map(function(s){return '<option value="'+s.key+'">'+s.key+'</option>';}).join('');
   document.getElementById('editRows').innerHTML=(r.employees||[]).map(function(e,i){
-    return '<div class="edit-row">'+
-      '<div class="edit-name">'+e.name+'</div>'+
-      '<select class="edit-sel" id="editSel_'+i+'">'+optsHTML+'</select>'+
+    return '<div class="edit-row" style="flex-wrap:wrap">'+
+      '<div class="edit-name" style="flex:1 1 100%">'+e.name+'</div>'+
+      '<select class="edit-sel" id="editSel_'+i+'" onchange="window._onEditStatusChange('+i+')">'+optsHTML+'</select>'+
+      '<input type="text" class="login-input" id="editNote_'+i+'" placeholder="ملاحظة (اختياري)" '+
+        'style="flex:1 1 auto;margin-top:6px;font-size:13px;padding:9px 12px" value="'+(e.note||'').replace(/"/g,'&quot;')+'">'+
     '</div>';
   }).join('');
   (r.employees||[]).forEach(function(e,i){
     var sel=document.getElementById('editSel_'+i);
     if(sel)sel.value=e.status;
+    var noteInput=document.getElementById('editNote_'+i);
+    if(noteInput)noteInput.style.display=(e.status!=='حاضر')?'block':'none';
   });
   document.getElementById('editOv').classList.add('open');
+};
+window._onEditStatusChange=function(i){
+  var sel=document.getElementById('editSel_'+i);
+  var noteInput=document.getElementById('editNote_'+i);
+  if(sel&&noteInput)noteInput.style.display=(sel.value!=='حاضر')?'block':'none';
 };
 document.getElementById('closeEditBtn').addEventListener('click',function(){
   document.getElementById('editOv').classList.remove('open');
@@ -2982,8 +3102,10 @@ document.getElementById('saveEditBtn').addEventListener('click',function(){
   if(!r)return;
   var emps=(r.employees||[]).map(function(e,i){
     var sel=document.getElementById('editSel_'+i);
+    var noteInput=document.getElementById('editNote_'+i);
     var newStatus=sel?sel.value:e.status;
-    return {name:e.name,status:newStatus,note:(newStatus!=='حاضر')?(e.note||''):''};
+    var newNote=noteInput?noteInput.value.trim():(e.note||'');
+    return {name:e.name,status:newStatus,note:(newStatus!=='حاضر')?newNote:''};
   });
   var btn=document.getElementById('saveEditBtn');
   btn.disabled=true;btn.textContent='جاري الحفظ...';
