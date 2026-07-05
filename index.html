@@ -185,6 +185,7 @@ input[type=date]:focus{border-color:var(--blue);}
   padding:5px 12px;font-size:13px;display:flex;align-items:center;gap:6px;}
 .emp-del{color:var(--red);cursor:pointer;font-size:14px;font-weight:900;}
 .emp-edit{color:var(--blue);cursor:pointer;font-size:13px;font-weight:900;}
+.emp-move{color:var(--purple);cursor:pointer;font-size:13px;font-weight:900;}
 .merge-box{background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.2);
   border-radius:12px;padding:12px 14px;}
 .merge-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
@@ -785,6 +786,22 @@ select.sel:focus{border-color:var(--blue);}
     <div class="modal-foot">
       <button class="btn btn-ghost" id="closeMergeBtn">الغاء</button>
       <button class="btn btn-blue" id="confirmMergeBtn">دمج</button>
+    </div>
+  </div>
+</div>
+
+<!-- TRANSFER EMPLOYEE MODAL -->
+<div class="ov" id="transferOv">
+  <div class="modal">
+    <h3>&#128257; نقل موظف لمحطة تانية</h3>
+    <p id="transferOvSub" style="margin-bottom:10px"></p>
+    <div class="modal-row">
+      <select id="transferSelect" class="sel" style="flex:1;min-width:0"></select>
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin-top:8px">هيتشال بالكامل من المحطة الحالية (اسمه وكل سجلات حضوره القديمة)، وينتقل بالكامل للمحطة الجديدة، وكأنه كان شغال فيها من الأول.</p>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="closeTransferBtn">الغاء</button>
+      <button class="btn btn-blue" id="confirmTransferBtn">نقل</button>
     </div>
   </div>
 </div>
@@ -1653,6 +1670,7 @@ function renderSt(){
       var empHTML=s.employees.map(function(e,i){
         return '<div class="emp-tag">'+e+
           '<span class="emp-edit" onclick="window._editEmp('+s.id+','+i+')">&#9998;</span>'+
+          '<span class="emp-move" onclick="window._openTransferSel('+s.id+','+i+')" title="نقل لمحطة تانية">&#128257;</span>'+
           '<span class="emp-del" onclick="window._delEmp('+s.id+','+i+')">&#10005;</span></div>';
       }).join('');
       return '<div class="st-card" id="sc'+s.id+'">'+
@@ -1804,6 +1822,13 @@ function arDayLabel(iso){
   var p=iso.split('-');
   var dow=AR_DAY_NAMES[new Date(iso+'T00:00:00').getDay()];
   return dow+' '+p[2]+'/'+p[1];
+}
+// قائمة موظفين المحطة في أي تقرير: قايمة المحطة الحالية + أي اسم سجّل حضور تاريخي فيها
+// حتى لو اتشال من القايمة بعد كده (منقول لمحطة تانية مثلاً) - عشان أيامه القديمة تفضل ظاهرة في تقارير المحطة دي
+function stationReportRoster(st,sd){
+  var base=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
+  var extra=Object.keys(sd||{}).filter(function(n){return base.indexOf(n)===-1;});
+  return base.concat(extra);
 }
 
 // ── فتح تسجيل حضور ليوم سابق (Backfill) ──
@@ -1993,6 +2018,56 @@ document.getElementById('confirmMergeBtn').addEventListener('click',function(){
   logAudit('دمج محطتين',sa.name+' + '+sb.name+' تحت مدير: '+sa.manager);
   document.getElementById('mergeOv').classList.remove('open');
   toast('تم دمج المحطتين','ok');
+});
+
+// ── نقل موظف لمحطة تانية (مع الاحتفاظ بأيامه القديمة في المحطة الأصلية) ──
+var activeTransferStId=null,activeTransferEmpIdx=null;
+window._openTransferSel=function(sid,idx){
+  var s=stations.find(function(x){return x.id===sid;});
+  if(!s)return;
+  var others=stations.filter(function(x){return x.id!==sid;});
+  if(!others.length){toast('مفيش محطات تانية متاحة للنقل','warn');return;}
+  activeTransferStId=sid;
+  activeTransferEmpIdx=idx;
+  document.getElementById('transferOvSub').textContent='نقل "'+s.employees[idx]+'" من "'+s.name+'" إلى:';
+  document.getElementById('transferSelect').innerHTML=others.map(function(x){
+    return '<option value="'+x.id+'">'+x.name+'</option>';
+  }).join('');
+  document.getElementById('transferOv').classList.add('open');
+};
+document.getElementById('closeTransferBtn').addEventListener('click',function(){
+  document.getElementById('transferOv').classList.remove('open');
+});
+document.getElementById('confirmTransferBtn').addEventListener('click',function(){
+  var sa=stations.find(function(s){return s.id===activeTransferStId;});
+  var targetId=Number(document.getElementById('transferSelect').value);
+  var sb=stations.find(function(s){return s.id===targetId;});
+  if(!sa||!sb)return;
+  var empName=sa.employees[activeTransferEmpIdx];
+  if(!empName)return;
+  if(sb.employees.indexOf(empName)!==-1){
+    toast('الاسم ده موجود بالفعل في محطة "'+sb.name+'"','err');
+    return;
+  }
+  var btn=this;
+  btn.disabled=true;btn.textContent='جاري النقل...';
+  sa.employees.splice(activeTransferEmpIdx,1);
+  sb.employees.push(empName);
+  saveStation(sa); saveStation(sb);
+  sbRpc('transfer_employee_history',{
+    p_old_station:sa.name,p_new_station:sb.name,p_new_manager:sb.manager,p_employee_name:empName
+  },function(movedCount,err){
+    btn.disabled=false;btn.textContent='نقل';
+    renderSt();
+    document.getElementById('transferOv').classList.remove('open');
+    if(err){
+      toast('اتنقل الاسم في القايمة، لكن فشل نقل السجلات القديمة','warn');
+      logAudit('نقل موظف (فشل نقل السجلات)',empName+': '+sa.name+' &larr; '+sb.name);
+      return;
+    }
+    logAudit('نقل موظف مع كامل تاريخه',empName+': '+sa.name+' &larr; '+sb.name+' - '+(movedCount||0)+' يوم');
+    toast('تم نقل "'+empName+'" لمحطة "'+sb.name+'" مع '+(movedCount||0)+' يوم من تاريخه الكامل','ok');
+  });
 });
 window._splitStation=function(sid){
   var s=stations.find(function(s){return s.id===sid;});
@@ -2366,9 +2441,11 @@ function showMgrForm(info,lockKey,openDates,todayLocked,targetDate,editDates,edi
 
     // شاشة المراجعة قبل الإرسال
     var pm={'حاضر':'pill-p','راحة':'pill-r','عطلة':'pill-h','مرضي':'pill-m','اجازة':'pill-v','انقطاع':'pill-a'};
+    var noteMap={}; // نحفظ الملاحظات هنا الآن، قبل ما نمسح الفورم الأصلي بشاشة المراجعة
     var previewHTML=people.map(function(n){
       var ne=document.getElementById('pn_'+CSS.escape(n));
       var note=(ne&&att[n]!=='حاضر')?ne.value.trim():'';
+      noteMap[n]=note;
       return '<div style="display:flex;justify-content:space-between;align-items:center;'+
         'padding:8px 0;border-bottom:1px solid var(--border)">'+
         '<span style="font-weight:700;font-size:13px">'+n+'</span>'+
@@ -2425,8 +2502,7 @@ function showMgrForm(info,lockKey,openDates,todayLocked,targetDate,editDates,edi
       var hh12=hh24%12;if(hh12===0)hh12=12;
       var time=String(hh12).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+' '+ampm;
       var emps=people.map(function(n){
-        var ne=document.getElementById('pn_'+CSS.escape(n));
-        return {name:n,status:att[n],note:(ne&&att[n]!=='حاضر')?ne.value.trim():''};
+        return {name:n,status:att[n],note:(att[n]!=='حاضر')?(noteMap[n]||''):''};
       });
       var saveAction=isEditMode?
         sbPatch('attendance','id=eq.'+editRecord.id,{employees:emps,report_time:(editRecord.report_time||'')+' (اتعدل الساعة '+time+')'}):
@@ -3266,7 +3342,7 @@ function buildExcel(data,dateLabel,isMonth,mode){
   var sr=[];
   sts.forEach(function(st){
     var sd=dataMap[st.name]||{};
-    var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
+    var pp=stationReportRoster(st,sd);
     pp.forEach(function(name){
       var ed=sd[name]||{};
       function cnt(k){return days.filter(function(d){return(ed[d.iso]||{}).status===k;}).length;}
@@ -3293,7 +3369,7 @@ function buildExcel(data,dateLabel,isMonth,mode){
     var rowsC=[];
     sts.forEach(function(st){
       var sd=dataMap[st.name]||{};
-      var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
+      var pp=stationReportRoster(st,sd);
       pp.forEach(function(name){
         var ed=sd[name]||{};
         function cnt(k){return days.filter(function(d){return(ed[d.iso]||{}).status===k;}).length;}
@@ -3311,7 +3387,7 @@ function buildExcel(data,dateLabel,isMonth,mode){
     // 2) شيت لكل محطة على حدة
     sts.forEach(function(st){
       var sd=dataMap[st.name]||{};
-      var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
+      var pp=stationReportRoster(st,sd);
       var hdr=['الموظف'].concat(days.map(function(d){return d.lbl;})).concat(['حاضر','راحة','عطلة','مرضي','اجازة','انقطاع','نسبة الحضور']);
       var rows=pp.map(function(name){
         var ed=sd[name]||{};
@@ -3380,7 +3456,7 @@ function buildExcelWeek(data,startISO,endISO,mode){
   var sr=[];
   sts.forEach(function(st){
     var sd=dataMap[st.name]||{};
-    var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
+    var pp=stationReportRoster(st,sd);
     pp.forEach(function(name){
       var ed=sd[name]||{};
       var pr=days.filter(function(d){return(ed[d.iso]||{}).status==='حاضر';}).length;
@@ -3406,7 +3482,7 @@ function buildExcelWeek(data,startISO,endISO,mode){
     var rowsC=[];
     sts.forEach(function(st){
       var sd=dataMap[st.name]||{};
-      var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
+      var pp=stationReportRoster(st,sd);
       pp.forEach(function(name){
         var ed=sd[name]||{};
         var cells=days.map(function(d){
@@ -3429,7 +3505,7 @@ function buildExcelWeek(data,startISO,endISO,mode){
     // 2) شيت لكل محطة
     sts.forEach(function(st){
       var sd=dataMap[st.name]||{};
-      var pp=(st.employees||[]).indexOf(st.manager)!==-1?(st.employees||[]):[st.manager].concat(st.employees||[]);
+      var pp=stationReportRoster(st,sd);
       var hdr=['الموظف'].concat(days.map(function(d){return d.lbl;})).concat(['حاضر','غياب','نسبة الحضور']);
       var rows=pp.map(function(name){
         var ed=sd[name]||{};
