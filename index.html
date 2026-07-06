@@ -570,9 +570,21 @@ select.sel:focus{border-color:var(--blue);}
       <input type="text" id="inCode" placeholder="كود المدير (اختياري)">
       <button class="btn btn-blue" id="addStBtn">+</button>
     </div>
-    <div class="sec" style="margin-top:24px">&#128197; فتح تسجيل يوم سابق (لمحطة واحدة أو أكتر)</div>
+    <div class="sec" style="margin-top:24px">&#128197; إدارة الأيام السابقة (لمحطة واحدة أو أكتر)</div>
     <div class="merge-box" style="margin-bottom:16px">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">اختار محطة أو أكتر من القايمة تحت، وحدد التاريخ، وهيتفتح لكل المحطات المختارة مرة واحدة</div>
+      <div style="display:flex;gap:0;margin-bottom:12px;border-radius:10px;overflow:hidden;border:1.5px solid var(--border)">
+        <button id="bulkModeOpenBtn" onclick="window._setBulkMode('open')"
+          style="flex:1;padding:10px;font-size:12.5px;font-weight:800;border:none;cursor:pointer;background:var(--grad-main);color:#fff">
+          &#128273; فتح تسجيل جديد
+        </button>
+        <button id="bulkModeEditBtn" onclick="window._setBulkMode('edit')"
+          style="flex:1;padding:10px;font-size:12.5px;font-weight:800;border:none;cursor:pointer;background:var(--bg);color:var(--text)">
+          &#9999;&#65039; السماح بتعديل يوم متسجل
+        </button>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px" id="bulkModeDesc">
+        اختار محطة أو أكتر من القايمة تحت، وحدد التاريخ، وهيتفتح لكل المحطات المختارة تسجيل جديد ليوم مفيهوش تقرير أصلاً
+      </div>
       <div id="bulkOpenStList" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;max-height:180px;overflow-y:auto"></div>
       <div class="row">
         <input type="date" id="bulkOpenDate" max="">
@@ -1955,6 +1967,25 @@ window._bulkOpenSelectAll=function(select){
   if(!el)return;
   el.querySelectorAll('input[type=checkbox]').forEach(function(cb){cb.checked=select;});
 };
+var bulkMode='open'; // 'open' = فتح تسجيل جديد | 'edit' = السماح بتعديل يوم متسجل بالفعل
+window._setBulkMode=function(mode){
+  bulkMode=mode;
+  var openBtn=document.getElementById('bulkModeOpenBtn');
+  var editBtn=document.getElementById('bulkModeEditBtn');
+  var desc=document.getElementById('bulkModeDesc');
+  var actionBtn=document.getElementById('bulkOpenBtn');
+  if(mode==='open'){
+    openBtn.style.background='var(--grad-main)';openBtn.style.color='#fff';
+    editBtn.style.background='var(--bg)';editBtn.style.color='var(--text)';
+    desc.textContent='اختار محطة أو أكتر من القايمة تحت، وحدد التاريخ، وهيتفتح لكل المحطات المختارة تسجيل جديد ليوم مفيهوش تقرير أصلاً';
+    actionBtn.textContent='فتح للمحطات المختارة';
+  } else {
+    editBtn.style.background='linear-gradient(135deg,#f59e0b,#d97706)';editBtn.style.color='#fff';
+    openBtn.style.background='var(--bg)';openBtn.style.color='var(--text)';
+    desc.textContent='اختار محطة أو أكتر، وحدد يوم متسجل بالفعل، وهيتسمح لمديري المحطات المختارة يعدّلوا تقرير اليوم ده (إذن لمرة واحدة لكل محطة)';
+    actionBtn.textContent='سماح للمحطات المختارة';
+  }
+};
 function bulkOpenDate(){
   var el=document.getElementById('bulkOpenStList');
   var dateInput=document.getElementById('bulkOpenDate');
@@ -1968,26 +1999,47 @@ function bulkOpenDate(){
   var names=selectedStations.map(function(s){return s.name;});
   var btn=document.getElementById('bulkOpenBtn');
   btn.disabled=true;btn.textContent='جاري التحقق...';
-  // تحقق أولاً: أي محطة من المختارة سجّلت اليوم ده بالفعل؟ (منعاً لتسجيل مكرر)
   sbGet('attendance','report_date_iso=eq.'+val+'&station=in.('+names.map(encodeURIComponent).join(',')+')&select=station',function(existingRecs){
-    btn.disabled=false;btn.textContent='فتح للمحطات المختارة';
-    var alreadyReported={};
-    (existingRecs||[]).forEach(function(r){alreadyReported[r.station]=true;});
+    btn.disabled=false;
+    var hasRecord={};
+    (existingRecs||[]).forEach(function(r){hasRecord[r.station]=true;});
     var opened=0,skipped=0,blocked=0;
-    selectedStations.forEach(function(s){
-      if(alreadyReported[s.name]){blocked++;return;}
-      s.open_dates=s.open_dates||[];
-      if(s.open_dates.indexOf(val)!==-1){skipped++;return;}
-      s.open_dates.push(val);
-      saveStation(s);
-      opened++;
-    });
-    renderSt();
-    logAudit('فتح يوم سابق لعدة محطات',arDayLabel(val)+' - '+opened+' محطة');
-    var msg='تم فتح '+arDayLabel(val)+' لـ '+opened+' محطة';
-    if(skipped)msg+='، '+skipped+' كانت مفتوحة بالفعل';
-    if(blocked)msg+='، و'+blocked+' اتجاهلت لأنها سجّلت اليوم ده بالفعل';
-    toast(msg,opened?'ok':'warn');
+
+    if(bulkMode==='open'){
+      btn.textContent='فتح للمحطات المختارة';
+      // تحقق: أي محطة من المختارة سجّلت اليوم ده بالفعل؟ (منعاً لتسجيل مكرر) -> اتجاهلها
+      selectedStations.forEach(function(s){
+        if(hasRecord[s.name]){blocked++;return;}
+        s.open_dates=s.open_dates||[];
+        if(s.open_dates.indexOf(val)!==-1){skipped++;return;}
+        s.open_dates.push(val);
+        saveStation(s);
+        opened++;
+      });
+      renderSt();
+      logAudit('فتح يوم سابق لعدة محطات',arDayLabel(val)+' - '+opened+' محطة');
+      var msg1='تم فتح '+arDayLabel(val)+' لـ '+opened+' محطة';
+      if(skipped)msg1+='، '+skipped+' كانت مفتوحة بالفعل';
+      if(blocked)msg1+='، و'+blocked+' اتجاهلت لأنها سجّلت اليوم ده بالفعل';
+      toast(msg1,opened?'ok':'warn');
+    } else {
+      btn.textContent='سماح للمحطات المختارة';
+      // تحقق: أي محطة من المختارة معندهاش تقرير أصلاً لليوم ده؟ (مفيش معنى نسمح بتعديل حاجة مش موجودة) -> اتجاهلها
+      selectedStations.forEach(function(s){
+        if(!hasRecord[s.name]){blocked++;return;}
+        s.edit_unlock_dates=s.edit_unlock_dates||[];
+        if(s.edit_unlock_dates.indexOf(val)!==-1){skipped++;return;}
+        s.edit_unlock_dates.push(val);
+        saveStation(s);
+        opened++;
+      });
+      renderSt();
+      logAudit('سماح بتعديل يوم لعدة محطات',arDayLabel(val)+' - '+opened+' محطة');
+      var msg2='تم السماح بتعديل '+arDayLabel(val)+' لـ '+opened+' محطة';
+      if(skipped)msg2+='، '+skipped+' كان مسموح لها بالفعل';
+      if(blocked)msg2+='، و'+blocked+' اتجاهلت لعدم وجود تقرير مسجل في اليوم ده أصلاً';
+      toast(msg2,opened?'ok':'warn');
+    }
   });
 }
 window._openMergeSel=function(sid){
