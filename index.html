@@ -319,6 +319,31 @@ input[type=date]:focus{border-color:var(--blue);box-shadow:0 0 0 4px rgba(59,130
 .bulk-link-btn:hover{opacity:.7;}
 .bulk-link-btn.muted{color:var(--muted);}
 
+/* PERSON SEARCH RESULTS */
+.person-hdr{display:flex;align-items:center;gap:12px;margin:16px 0 12px;padding:14px 16px;
+  background:var(--bg);border-radius:14px;border:1.5px solid var(--border);}
+.person-avatar{width:46px;height:46px;border-radius:50%;background:var(--grad-purple);
+  display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;
+  color:#fff;flex-shrink:0;box-shadow:0 4px 14px rgba(139,92,246,.35);}
+.person-name{font-size:16px;font-weight:900;}
+.person-meta{font-size:11.5px;color:var(--muted);margin-top:2px;}
+.person-station-card{background:var(--grad-card);border:1.5px solid var(--border);border-radius:16px;
+  padding:15px 17px;margin-bottom:10px;position:relative;overflow:hidden;
+  box-shadow:0 3px 12px var(--shadow);
+  transition:transform .25s cubic-bezier(.34,1.56,.64,1),border-color .25s;
+  animation:fadeUp .4s cubic-bezier(.16,1,.3,1) both;}
+.person-station-card:hover{transform:translateY(-2px);border-color:rgba(139,92,246,.3);}
+.person-station-card.current{border-color:rgba(16,185,129,.4);}
+.person-station-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.person-station-name{font-size:14.5px;font-weight:900;}
+.person-current-badge{background:var(--grad-green);color:#fff;font-size:10px;font-weight:800;
+  padding:3px 9px;border-radius:20px;}
+.person-station-range{font-size:11px;color:var(--muted);margin-top:2px;}
+.person-stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px;}
+.person-stat-chip{text-align:center;padding:8px 4px;border-radius:10px;background:var(--bg);}
+.person-stat-n{font-size:16px;font-weight:900;line-height:1.2;}
+.person-stat-l{font-size:9.5px;color:var(--muted);margin-top:2px;font-weight:700;}
+
 /* LINK CARD */
 .lnk-card{background:var(--grad-card);border:1.5px solid var(--border);border-radius:18px;
   padding:17px;margin-bottom:13px;box-shadow:0 3px 12px var(--shadow);transition:border .2s;position:relative;}
@@ -883,6 +908,20 @@ body.light .dash-card::before,body.light .lnk-card::before,body.light .rec-card:
 
   <!-- STATS -->
   <div class="view" id="view-stats">
+    <div class="bulk-card" id="personSearchCard" style="margin-bottom:18px">
+      <div class="bulk-card-hdr">
+        <div class="bulk-card-icon" style="background:var(--grad-purple)">&#128269;</div>
+        <div>
+          <div class="bulk-card-title">بحث شامل عن موظف</div>
+          <div class="bulk-card-sub">هيدوّرلك في كل المحطات، حتى لو اتنقل بينهم</div>
+        </div>
+      </div>
+      <div class="row">
+        <input type="text" id="personSearchInput" placeholder="اكتب اسم الموظف أو المدير...">
+        <button class="btn btn-blue" id="personSearchBtn">بحث</button>
+      </div>
+      <div id="personSearchResults"></div>
+    </div>
     <div class="info-box ib-blue">
       &#128200; نسبة الحضور لكل موظف خلال شهر <span id="statsMonth"></span>
     </div>
@@ -2409,7 +2448,25 @@ function addEmp(){
   if(!n)return;
   var s=stations.find(function(s){return s.id===activeStId;});
   if(!s)return;
-  if(s.employees.indexOf(n)!==-1){toast('الاسم موجود','warn');return;}
+  if(s.employees.indexOf(n)!==-1){toast('الاسم موجود بالفعل في نفس المحطة','warn');return;}
+  // تحقق: هل الاسم ده موجود في محطة تانية؟ (منعاً لتسجيل نفس الشخص مرتين بالغلط)
+  var otherStation=stations.find(function(x){return x.id!==s.id&&x.employees.indexOf(n)!==-1;});
+  if(otherStation){
+    confirmModal(
+      'الاسم موجود في محطة تانية!',
+      'الموظف "'+n+'" مسجّل بالفعل في محطة "'+otherStation.name+'".<br><br>'+
+      'لو ده <b>نفس الشخص</b> وعايز تنقله بس، استخدم زرار النقل 🔄 بدل ما تضيفه هنا يدوي.<br><br>'+
+      'لو ده <b>شخص تاني بنفس الاسم بالصدفة</b>، تقدر تكمل الإضافة عادي.',
+      function(){
+        doAddEmp(s,n);
+      },
+      {okLabel:'شخص مختلف، أضفه برضه',okBlue:false}
+    );
+    return;
+  }
+  doAddEmp(s,n);
+}
+function doAddEmp(s,n){
   s.employees.push(n); saveStation(s); renderSt();
   logAudit('اضافة موظف',n+' - محطة: '+s.name);
   document.getElementById('empIn').value='';
@@ -4470,6 +4527,84 @@ function renderStatsChart(labels,data){
     }
   });
 }
+
+// ── PERSON SEARCH (بحث شامل عن موظف عبر كل المحطات، حتى المنقول منها) ──
+var PERSON_SEARCH_DAYS=180; // نطاق البحث الافتراضي بالأيام، قابل للتوسيع لكل التاريخ
+function searchPerson(fullHistory){
+  var q=document.getElementById('personSearchInput').value.trim();
+  var resEl=document.getElementById('personSearchResults');
+  if(!q){resEl.innerHTML='';return;}
+  var btn=document.getElementById('personSearchBtn');
+  btn.disabled=true;btn.textContent='جاري البحث...';
+  resEl.innerHTML='<div class="loading">&#9203; جاري البحث في كل المحطات...</div>';
+  var filter='select=station,manager,report_date,report_date_iso,employees&order=report_date_iso.asc&limit=8000';
+  if(!fullHistory){
+    var since=new Date(todayISO+'T00:00:00'); since.setDate(since.getDate()-PERSON_SEARCH_DAYS);
+    filter='report_date_iso=gte.'+localISO(since)+'&'+filter;
+  }
+  sbGet('attendance',filter,function(data){
+    btn.disabled=false;btn.textContent='بحث';
+    var qLower=q.toLowerCase();
+    var matchedName=null;
+    var byStation={}; // {stationName: {first,last,counts:{},total}}
+    (data||[]).forEach(function(r){
+      (r.employees||[]).forEach(function(e){
+        if(!e.name||e.name.toLowerCase().indexOf(qLower)===-1)return;
+        if(!matchedName)matchedName=e.name; // أول اسم مطابق نعتبره الاسم الكامل المعروض
+        if(e.name!==matchedName)return; // نطابق بالاسم الكامل بعد ما نحدده أول مرة
+        var st=byStation[r.station]=byStation[r.station]||{first:r.report_date,last:r.report_date,counts:{},total:0};
+        st.last=r.report_date;
+        st.counts[e.status]=(st.counts[e.status]||0)+1;
+        st.total++;
+      });
+    });
+    if(!matchedName){
+      var scopeMsg=fullHistory?'':' في آخر '+PERSON_SEARCH_DAYS+' يوم';
+      resEl.innerHTML='<div class="empty"><div class="ei">&#128269;</div>'+
+        '<p>مفيش نتائج لـ "'+q+'"'+scopeMsg+'</p>'+
+        (fullHistory?'':'<p style="margin-top:6px"><span class="bulk-link-btn" onclick="searchPerson(true)">وسّع البحث لكل التاريخ</span></p>')+
+        '</div>';
+      return;
+    }
+    var currentStation=stations.find(function(s){return s.employees.indexOf(matchedName)!==-1;});
+    // نرتب المحطات حسب آخر تاريخ حضور فيها (الأحدث أولاً)
+    var stationNames=Object.keys(byStation).sort(function(a,b){
+      var da=byStation[a].last.split('/').reverse().join('-');
+      var db=byStation[b].last.split('/').reverse().join('-');
+      return db.localeCompare(da);
+    });
+    var initial=matchedName.charAt(0).toUpperCase();
+    var headHTML='<div class="person-hdr">'+
+      '<div class="person-avatar">'+initial+'</div>'+
+      '<div><div class="person-name">'+matchedName+'</div>'+
+      '<div class="person-meta">سجّل في '+stationNames.length+' محطة'+(stationNames.length>1?' مختلفة':'')+'</div></div></div>';
+    var cardsHTML=stationNames.map(function(stName){
+      var d=byStation[stName];
+      var isCurrent=currentStation&&currentStation.name===stName;
+      var present=d.counts['حاضر']||0;
+      var absent=d.counts['انقطاع']||0;
+      var pct=d.total?Math.round(present/d.total*100):0;
+      return '<div class="person-station-card'+(isCurrent?' current':'')+'">'+
+        '<div class="person-station-hdr">'+
+          '<div><div class="person-station-name">'+stName+'</div>'+
+          '<div class="person-station-range">من '+d.first+' لحد '+d.last+'</div></div>'+
+          (isCurrent?'<span class="person-current-badge">&#128205; حالياً</span>':'')+
+        '</div>'+
+        '<div class="person-stat-grid">'+
+          '<div class="person-stat-chip"><div class="person-stat-n" style="color:var(--green)">'+present+'</div><div class="person-stat-l">حاضر</div></div>'+
+          '<div class="person-stat-chip"><div class="person-stat-n" style="color:var(--red)">'+absent+'</div><div class="person-stat-l">انقطاع</div></div>'+
+          '<div class="person-stat-chip"><div class="person-stat-n" style="color:var(--blue)">'+pct+'%</div><div class="person-stat-l">نسبة الحضور</div></div>'+
+        '</div></div>';
+    }).join('');
+    var footHTML=fullHistory?'':
+      '<p style="text-align:center;margin-top:8px"><span class="bulk-link-btn" onclick="searchPerson(true)">عرض كل التاريخ (مش آخر '+PERSON_SEARCH_DAYS+' يوم بس)</span></p>';
+    resEl.innerHTML=headHTML+cardsHTML+footHTML;
+  });
+}
+document.getElementById('personSearchBtn').addEventListener('click',function(){searchPerson(false);});
+document.getElementById('personSearchInput').addEventListener('keydown',function(e){
+  if(e.key==='Enter')searchPerson(false);
+});
 
 // ── TOAST ──
 var _toastTimer=null;
