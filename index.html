@@ -2747,13 +2747,29 @@ function showMgrForm(info,lockKey,openDates,todayLocked,targetDate,editDates,edi
     var name=input.value.trim();
     if(!name)return;
     if(people.indexOf(name)!==-1){toast('الاسم موجود بالفعل','warn');return;}
+    var addBtn=document.getElementById('addPersonBtn');
+    addBtn.disabled=true;addBtn.textContent='جاري التحقق...';
+    // تحقق شامل: هل الاسم ده مسجل بالفعل في أي محطة تانية؟ (بما فيها المحطة الحالية لو مش ظاهر في القايمة لأي سبب)
+    sbGet('stations','select=name,employees',function(allStations){
+      addBtn.disabled=false;addBtn.textContent='اضافة';
+      var foundIn=(allStations||[]).find(function(s){
+        return s.name!==info.stationName && (s.employees||[]).indexOf(name)!==-1;
+      });
+      if(foundIn){
+        toast('الاسم "'+name+'" مسجّل بالفعل في محطة "'+foundIn.name+'"، لازم تكلم الأدمن ينقله بدل ما يتسجل مرتين','err');
+        return;
+      }
+      finishAddPerson(name);
+    });
+  }
+  function finishAddPerson(name){
     people.push(name);
     total=people.length;
     document.getElementById('peopleList').insertAdjacentHTML('beforeend',buildCard(name,false));
     document.getElementById('totalCount').textContent=total;
     document.getElementById('pf').style.width=Math.round(Object.keys(att).length/total*100)+'%';
-    input.value='';
-    input.focus();
+    document.getElementById('newPersonInput').value='';
+    document.getElementById('newPersonInput').focus();
     var card=document.getElementById('pr_'+CSS.escape(name));
     if(card)card.scrollIntoView({behavior:'smooth',block:'center'});
   }
