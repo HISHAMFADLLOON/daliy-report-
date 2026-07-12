@@ -967,6 +967,18 @@ body.light .dash-card::before,body.light .lnk-card::before,body.light .rec-card:
     <div id="diagBox">
       <div class="empty"><div class="ei">&#129513;</div><p>دوس "فحص النظام الآن" لبدء التشخيص</p></div>
     </div>
+
+    <div class="bulk-card" style="margin-top:20px">
+      <div class="bulk-card-hdr">
+        <div class="bulk-card-icon" style="background:var(--grad-pink)">&#128101;</div>
+        <div>
+          <div class="bulk-card-title">مراجعة الأسماء المتشابهة</div>
+          <div class="bulk-card-sub">فحص كل المحطات عن أشخاص ممكن يكونوا متسجلين مرتين بأسماء مختلفة شوية</div>
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-full" id="scanDupBtn">&#128269; فحص الأسماء المتشابهة</button>
+      <div id="dupNamesResults" style="margin-top:14px"></div>
+    </div>
   </div>
 
   <div class="footer">
@@ -1603,6 +1615,8 @@ function initAdmin(){
   document.getElementById('addUserBtn').addEventListener('click',addUser);
   var rdb=document.getElementById('runDiagBtn');
   if(rdb)rdb.addEventListener('click',runDiagnostics);
+  var sdb=document.getElementById('scanDupBtn');
+  if(sdb)sdb.addEventListener('click',scanDuplicateNames);
   var ocb=document.getElementById('orphanCancelBtn');
   if(ocb)ocb.addEventListener('click',function(){document.getElementById('orphanOv').classList.remove('open');});
   var odb=document.getElementById('orphanDeleteBtn');
@@ -2139,6 +2153,87 @@ function findNameMatches(newName,candidates){
     return true;
   });
 }
+
+// ── مراجعة الأسماء المتشابهة عبر كل المحطات + الدمج ──
+var _dupPairs=[];
+function scanDuplicateNames(){
+  var resEl=document.getElementById('dupNamesResults');
+  var btn=document.getElementById('scanDupBtn');
+  btn.disabled=true;btn.textContent='جاري الفحص...';
+  resEl.innerHTML='<div class="loading">&#9203; جاري فحص كل المحطات...</div>';
+  setTimeout(function(){ // نأجلها شوية عشان الزرار يتحدث بصرياً قبل الحساب لو المحطات كتير
+    var allPeople=[];
+    stations.forEach(function(st){
+      st.employees.forEach(function(e){allPeople.push({name:e,stationName:st.name});});
+    });
+    var pairs=[];
+    var seenPairKeys={};
+    allPeople.forEach(function(person,idx){
+      var others=allPeople.filter(function(p,i){return i!==idx;});
+      var matches=findNameMatches(person.name,others);
+      matches.forEach(function(m){
+        if(m.name===person.name&&m.stationName===person.stationName)return;
+        var key=[person.stationName+'|'+person.name,m.stationName+'|'+m.name].sort().join('~~');
+        if(seenPairKeys[key])return;
+        seenPairKeys[key]=true;
+        pairs.push({a:person,b:m});
+      });
+    });
+    btn.disabled=false;btn.innerHTML='&#128269; فحص الأسماء المتشابهة';
+    _dupPairs=pairs;
+    if(!pairs.length){
+      resEl.innerHTML='<div class="empty"><div class="ei">&#9989;</div><p>مفيش أي أسماء متشابهة محتملة دلوقتي</p></div>';
+      return;
+    }
+    resEl.innerHTML=pairs.map(function(pr,i){
+      return '<div class="diag-item sev-warn" id="dupPair'+i+'">'+
+        '<div class="diag-head"><div class="diag-ic">&#128101;</div><div>'+
+          '<div class="diag-title">"'+pr.a.name+'" (محطة '+pr.a.stationName+') شبه "'+pr.b.name+'" (محطة '+pr.b.stationName+')</div>'+
+          '<div class="diag-desc">لو ده نفس الشخص، ادمجهم في اسم واحد باختيار مين الاسم اللي هيفضل. لو شخصين مختلفين بالصدفة، سيبهم زي ما هم من غير أي إجراء.</div>'+
+        '</div></div>'+
+        '<div class="diag-btn-row">'+
+          '<button class="diag-fix-btn" onclick="window._mergePeople('+i+',\'a-to-b\')">دمج "'+pr.a.name+'" داخل "'+pr.b.name+'"</button>'+
+          '<button class="diag-fix-btn" onclick="window._mergePeople('+i+',\'b-to-a\')">دمج "'+pr.b.name+'" داخل "'+pr.a.name+'"</button>'+
+        '</div></div>';
+    }).join('');
+  },50);
+}
+window._mergePeople=function(i,direction){
+  var pr=_dupPairs[i];
+  if(!pr)return;
+  var source=direction==='a-to-b'?pr.a:pr.b;
+  var target=direction==='a-to-b'?pr.b:pr.a;
+  confirmModal(
+    'تأكيد الدمج',
+    'هيتم دمج "'+source.name+'" (محطة '+source.stationName+') داخل "'+target.name+'" (محطة '+target.stationName+').<br><br>'+
+    'كل سجلات حضور "'+source.name+'" هتتنقل وتتسجل باسم "'+target.name+'"، وهيتشال من قايمة موظفي محطته.<br><br>'+
+    '<b>العملية دي لا يمكن التراجع عنها.</b>',
+    function(){
+      sbRpc('merge_person',{
+        p_source_station:source.stationName,p_source_name:source.name,
+        p_target_station:target.stationName,p_target_name:target.name
+      },function(count,err){
+        if(err){toast('فشل الدمج، حاول تاني','err');return;}
+        var sourceSt=stations.find(function(s){return s.name===source.stationName;});
+        var targetSt=stations.find(function(s){return s.name===target.stationName;});
+        if(sourceSt){
+          sourceSt.employees=sourceSt.employees.filter(function(e){return e!==source.name;});
+          saveStation(sourceSt);
+        }
+        if(targetSt&&targetSt.employees.indexOf(target.name)===-1){
+          targetSt.employees.push(target.name);
+          saveStation(targetSt);
+        }
+        renderSt();
+        logAudit('دمج شخصين',source.name+' ('+source.stationName+') &larr; '+target.name+' ('+target.stationName+') - '+(count||0)+' سجل');
+        toast('تم الدمج بنجاح، '+(count||0)+' سجل اتنقل لـ "'+target.name+'"','ok');
+        var card=document.getElementById('dupPair'+i);
+        if(card)card.remove();
+      });
+    },
+    {okLabel:'ادمج',okBlue:false}
+  );
+};
 // قائمة موظفين المحطة في أي تقرير: قايمة المحطة الحالية + أي اسم سجّل حضور تاريخي فيها
 // حتى لو اتشال من القايمة بعد كده (منقول لمحطة تانية مثلاً) - عشان أيامه القديمة تفضل ظاهرة في تقارير المحطة دي
 function stationReportRoster(st,sd){
