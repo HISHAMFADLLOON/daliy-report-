@@ -2102,14 +2102,42 @@ function arDayLabel(iso){
   var dow=AR_DAY_NAMES[new Date(iso+'T00:00:00').getDay()];
   return dow+' '+p[2]+'/'+p[1];
 }
-// أول اسم بس من الاسم الكامل، للمقارنة بين الأسماء بدون الحاجة لتطابق كامل
-// مثال: "أحمد محمد علي" و "أحمد" و "احمد السيد" كلهم بيرجعوا نفس أول اسم (بعد توحيد الألف)
-function firstNameOf(fullName){
-  var n=(fullName||'').trim().split(/\s+/)[0]||'';
-  return n.replace(/[إأآا]/g,'ا').toLowerCase();
+// يقسّم الاسم لكلمات موحّدة (توحيد أشكال الألف) للمقارنة
+function tokenizeName(name){
+  return (name||'').trim().split(/\s+/).filter(Boolean).map(function(w){
+    return w.replace(/[إأآا]/g,'ا').toLowerCase();
+  });
 }
-function namesLikelyMatch(a,b){
-  return firstNameOf(a)!==''&&firstNameOf(a)===firstNameOf(b);
+// نظام تضييق تدريجي: يبدأ بمطابقة أول اسم، ولو لقى أكتر من شخص مختلف بنفس الاسم ده
+// (يعني الاسم شائع)، يضيف الاسم التاني كمان للمقارنة يضيّق بيه، وهكذا لحد رابع اسم لو احتاج،
+// إلى أن يوصل لمرشح واحد مميز أو ينفد عدد الكلمات في الاسم الجديد
+// candidates: [{name, stationName, sameStation}]
+function findNameMatches(newName,candidates){
+  var newWords=tokenizeName(newName);
+  if(!newWords.length)return [];
+  var pool=candidates.slice();
+  var level=0;
+  var maxLevel=Math.min(newWords.length,4);
+  while(level<maxLevel){
+    var word=newWords[level];
+    var next=pool.filter(function(c){return tokenizeName(c.name)[level]===word;});
+    if(!next.length){
+      if(level===0)return []; // مفيش تطابق خالص من أول اسم، مأمن نضيف
+      break; // اتطابق لحد المستوى ده، والمستوى الجديد ما لقاش حد، نكتفي بآخر مجموعة صحيحة
+    }
+    pool=next;
+    level++;
+    var distinct={};
+    pool.forEach(function(c){distinct[c.name]=1;});
+    if(Object.keys(distinct).length<=1)break; // اتضيّق لاسم واحد مميز، مفيش داعي نكمل تعميق
+  }
+  var seen={};
+  return pool.filter(function(c){
+    var key=c.name+'|'+c.stationName;
+    if(seen[key])return false;
+    seen[key]=true;
+    return true;
+  });
 }
 // قائمة موظفين المحطة في أي تقرير: قايمة المحطة الحالية + أي اسم سجّل حضور تاريخي فيها
 // حتى لو اتشال من القايمة بعد كده (منقول لمحطة تانية مثلاً) - عشان أيامه القديمة تفضل ظاهرة في تقارير المحطة دي
@@ -2457,43 +2485,26 @@ function addEmp(){
   if(!n)return;
   var s=stations.find(function(s){return s.id===activeStId;});
   if(!s)return;
-  var sameMatch=s.employees.find(function(e){return namesLikelyMatch(e,n);});
-  if(sameMatch){
-    confirmModal(
-      'في اسم قريب في نفس المحطة!',
-      'الاسم "'+sameMatch+'" موجود بالفعل في المحطة دي (نفس أول اسم اللي كتبته).<br><br>'+
-      'لو ده <b>نفس الشخص</b>، مفيش داعي تضيفه تاني.<br><br>'+
-      'لو ده <b>شخص تاني بالصدفة بنفس أول اسم</b>، تقدر تكمل الإضافة عادي.',
-      function(){checkOtherStationsThenAdd(s,n);},
-      {okLabel:'شخص مختلف، أضفه برضه',okBlue:false}
-    );
-    return;
-  }
-  checkOtherStationsThenAdd(s,n);
-}
-function checkOtherStationsThenAdd(s,n){
-  // تحقق: هل فيه اسم قريب من ده في محطة تانية؟ (بمطابقة أول اسم بس، منعاً لتسجيل نفس الشخص مرتين بالغلط)
-  var otherStation=null,otherMatch=null;
-  stations.some(function(x){
-    if(x.id===s.id)return false;
-    var m=x.employees.find(function(e){return namesLikelyMatch(e,n);});
-    if(m){otherStation=x;otherMatch=m;return true;}
-    return false;
+  var allCandidates=[];
+  stations.forEach(function(st){
+    st.employees.forEach(function(e){
+      allCandidates.push({name:e,stationName:st.name,sameStation:st.id===s.id});
+    });
   });
-  if(otherStation){
-    confirmModal(
-      'في اسم قريب في محطة تانية!',
-      'الاسم "'+otherMatch+'" مسجّل بالفعل في محطة "'+otherStation.name+'" (نفس أول اسم اللي كتبته).<br><br>'+
-      'لو ده <b>نفس الشخص</b> وعايز تنقله بس، استخدم زرار النقل 🔄 بدل ما تضيفه هنا يدوي.<br><br>'+
-      'لو ده <b>شخص تاني بالصدفة</b>، تقدر تكمل الإضافة عادي.',
-      function(){
-        doAddEmp(s,n);
-      },
-      {okLabel:'شخص مختلف، أضفه برضه',okBlue:false}
-    );
-    return;
-  }
-  doAddEmp(s,n);
+  var matches=findNameMatches(n,allCandidates);
+  if(!matches.length){doAddEmp(s,n);return;}
+  var linesHTML=matches.map(function(m){
+    return '<div style="padding:8px 0;border-bottom:1px solid var(--border)">'+
+      '<b>'+m.name+'</b> &mdash; '+(m.sameStation?'<span style="color:var(--gold)">نفس المحطة دي</span>':'محطة "'+m.stationName+'"')+
+      '</div>';
+  }).join('');
+  confirmModal(
+    matches.length===1?'في اسم قريب ممكن يكون نفس الشخص!':'في '+matches.length+' أسماء قريبة محتملة!',
+    'الاسم "'+n+'" قريب من:<br>'+linesHTML+
+    '<br>لو حد منهم هو نفس الشخص، استخدم النقل 🔄 بدل الإضافة اليدوية، أو تأكد من الاسم كامل.<br>لو شخص جديد تماماً، كمّل الإضافة عادي.',
+    function(){doAddEmp(s,n);},
+    {okLabel:'شخص مختلف، أضفه برضه',okBlue:false}
+  );
 }
 function doAddEmp(s,n){
   s.employees.push(n); saveStation(s); renderSt();
@@ -2775,24 +2786,28 @@ function showMgrForm(info,lockKey,openDates,todayLocked,targetDate,editDates,edi
     var input=document.getElementById('newPersonInput');
     var name=input.value.trim();
     if(!name)return;
-    var sameMatch=people.find(function(p){return namesLikelyMatch(p,name);});
-    if(sameMatch){toast('في اسم قريب منه بالفعل: "'+sameMatch+'"','warn');return;}
     var addBtn=document.getElementById('addPersonBtn');
     addBtn.disabled=true;addBtn.textContent='جاري التحقق...';
-    // تحقق شامل: هل فيه اسم قريب من ده (نفس أول اسم) في أي محطة تانية؟
+    // تحقق شامل: هل فيه أسماء قريبة من ده (بنظام التضييق التدريجي) في أي محطة، بما فيها المحطة الحالية؟
     sbGet('stations','select=name,employees',function(allStations){
       addBtn.disabled=false;addBtn.textContent='اضافة';
-      var foundIn=null,foundMatch=null;
-      (allStations||[]).some(function(s){
-        if(s.name===info.stationName)return false;
-        var m=(s.employees||[]).find(function(e){return namesLikelyMatch(e,name);});
-        if(m){foundIn=s;foundMatch=m;return true;}
-        return false;
+      var allCandidates=[];
+      (allStations||[]).forEach(function(s){
+        (s.employees||[]).forEach(function(e){
+          allCandidates.push({name:e,stationName:s.name,sameStation:s.name===info.stationName});
+        });
       });
-      if(foundIn){
-        toast('الاسم "'+foundMatch+'" (نفس أول اسم) مسجّل بالفعل في محطة "'+foundIn.name+'"، لازم تكلم الأدمن ينقله بدل ما يتسجل مرتين','err');
+      // نضيف كمان أي حد اتضاف للفورم الحالي لسه ما اتسجلش في قاعدة البيانات
+      people.forEach(function(p){allCandidates.push({name:p,stationName:info.stationName,sameStation:true});});
+      var matches=findNameMatches(name,allCandidates);
+      var otherMatches=matches.filter(function(m){return !m.sameStation;});
+      if(otherMatches.length){
+        var namesLine=otherMatches.map(function(m){return '"'+m.name+'" (محطة '+m.stationName+')';}).join('، ');
+        toast('في اسم قريب مسجّل بالفعل في محطة تانية: '+namesLine+' — لازم تكلم الأدمن ينقله بدل ما يتسجل مرتين','err');
         return;
       }
+      var sameMatches=matches.filter(function(m){return m.sameStation;});
+      if(sameMatches.length){toast('في اسم قريب منه بالفعل: "'+sameMatches[0].name+'"','warn');return;}
       finishAddPerson(name);
     });
   }
