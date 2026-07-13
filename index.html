@@ -2129,24 +2129,19 @@ function tokenizeName(name){
 function findNameMatches(newName,candidates){
   var newWords=tokenizeName(newName);
   if(!newWords.length)return [];
-  var pool=candidates.slice();
-  var level=0;
-  var maxLevel=Math.min(newWords.length,4);
-  while(level<maxLevel){
-    var word=newWords[level];
-    var next=pool.filter(function(c){return tokenizeName(c.name)[level]===word;});
-    if(!next.length){
-      if(level===0)return []; // مفيش تطابق خالص من أول اسم، مأمن نضيف
-      break; // اتطابق لحد المستوى ده، والمستوى الجديد ما لقاش حد، نكتفي بآخر مجموعة صحيحة
+  // مرشح بيتطابق بس لو كل كلمة مشتركة بين الاسمين متطابقة تماماً (لحد أول 4 كلمات)
+  // يعني لو أي كلمة مختلفة (زي "سمير" مقابل "جبر")، مفيش تشابه خالص مهما كان أول اسم متطابق
+  var matched=candidates.filter(function(c){
+    var cWords=tokenizeName(c.name);
+    var len=Math.min(newWords.length,cWords.length,4);
+    if(len===0)return false;
+    for(var i=0;i<len;i++){
+      if(newWords[i]!==cWords[i])return false;
     }
-    pool=next;
-    level++;
-    var distinct={};
-    pool.forEach(function(c){distinct[c.name]=1;});
-    if(Object.keys(distinct).length<=1)break; // اتضيّق لاسم واحد مميز، مفيش داعي نكمل تعميق
-  }
+    return true;
+  });
   var seen={};
-  return pool.filter(function(c){
+  return matched.filter(function(c){
     var key=c.name+'|'+c.stationName;
     if(seen[key])return false;
     seen[key]=true;
