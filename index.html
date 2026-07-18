@@ -2583,18 +2583,12 @@ function addEmp(){
   });
   var matches=findNameMatches(n,allCandidates);
   if(!matches.length){doAddEmp(s,n);return;}
-  var linesHTML=matches.map(function(m){
-    return '<div style="padding:8px 0;border-bottom:1px solid var(--border)">'+
-      '<b>'+m.name+'</b> &mdash; '+(m.sameStation?'<span style="color:var(--gold)">نفس المحطة دي</span>':'محطة "'+m.stationName+'"')+
-      '</div>';
-  }).join('');
-  confirmModal(
-    matches.length===1?'في اسم قريب ممكن يكون نفس الشخص!':'في '+matches.length+' أسماء قريبة محتملة!',
-    'الاسم "'+n+'" قريب من:<br>'+linesHTML+
-    '<br>لو حد منهم هو نفس الشخص، استخدم النقل 🔄 بدل الإضافة اليدوية، أو تأكد من الاسم كامل.<br>لو شخص جديد تماماً، كمّل الإضافة عادي.',
-    function(){doAddEmp(s,n);},
-    {okLabel:'شخص مختلف، أضفه برضه',okBlue:false}
-  );
+  var nameWords=tokenizeName(n);
+  if(nameWords.length<3){
+    toast('الاسم متكرر أو قريب من اسم موجود بالفعل. اكتب الاسم كامل (3 أجزاء على الأقل) وحاول تاني','err');
+  } else {
+    toast('الاسم ده متكرر بالفعل، مينفعش تسجله تاني','err');
+  }
 }
 function doAddEmp(s,n){
   s.employees.push(n); saveStation(s); renderSt();
@@ -2878,27 +2872,23 @@ function showMgrForm(info,lockKey,openDates,todayLocked,targetDate,editDates,edi
     if(!name)return;
     var addBtn=document.getElementById('addPersonBtn');
     addBtn.disabled=true;addBtn.textContent='جاري التحقق...';
-    // تحقق شامل: هل فيه أسماء قريبة من ده (بنظام التضييق التدريجي) في أي محطة، بما فيها المحطة الحالية؟
     sbGet('stations','select=name,employees',function(allStations){
       addBtn.disabled=false;addBtn.textContent='اضافة';
       var allCandidates=[];
       (allStations||[]).forEach(function(s){
         (s.employees||[]).forEach(function(e){
-          allCandidates.push({name:e,stationName:s.name,sameStation:s.name===info.stationName});
+          allCandidates.push({name:e,stationName:s.name});
         });
       });
-      // نضيف كمان أي حد اتضاف للفورم الحالي لسه ما اتسجلش في قاعدة البيانات
-      people.forEach(function(p){allCandidates.push({name:p,stationName:info.stationName,sameStation:true});});
+      people.forEach(function(p){allCandidates.push({name:p,stationName:info.stationName});});
       var matches=findNameMatches(name,allCandidates);
-      var otherMatches=matches.filter(function(m){return !m.sameStation;});
-      if(otherMatches.length){
-        var namesLine=otherMatches.map(function(m){return '"'+m.name+'" (محطة '+m.stationName+')';}).join('، ');
-        toast('في اسم قريب مسجّل بالفعل في محطة تانية: '+namesLine+' — لازم تكلم الأدمن ينقله بدل ما يتسجل مرتين','err');
-        return;
+      if(!matches.length){finishAddPerson(name);return;}
+      var nameWords=tokenizeName(name);
+      if(nameWords.length<3){
+        toast('الاسم متكرر أو قريب من اسم موجود بالفعل. اكتب الاسم كامل (3 أجزاء على الأقل) وحاول تاني','err');
+      } else {
+        toast('الاسم ده متكرر بالفعل، لازم تكلم الأدمن لو محتاج تسجله','err');
       }
-      var sameMatches=matches.filter(function(m){return m.sameStation;});
-      if(sameMatches.length){toast('في اسم قريب منه بالفعل: "'+sameMatches[0].name+'"','warn');return;}
-      finishAddPerson(name);
     });
   }
   function finishAddPerson(name){
@@ -4778,7 +4768,7 @@ function confirmModal(title,msg,onConfirm,opts){
   if(opts.extraHtml){
     document.getElementById('confirmMsg').innerHTML=(msg?msg+'<br>':'')+opts.extraHtml;
   } else {
-    document.getElementById('confirmMsg').textContent=msg||'';
+    document.getElementById('confirmMsg').innerHTML=msg||'';
   }
   document.getElementById('confirmOkBtn').textContent=opts.okLabel||'تأكيد الحذف';
   var okBtn=document.getElementById('confirmOkBtn');
