@@ -1320,7 +1320,8 @@ function saveStation(s){
     id:s.id,name:s.name,manager:s.manager,employees:s.employees,
     manager_code:s.manager_code||'',manager_group:s.manager_group||null,
     mgr_visible:s.mgr_visible!==false,open_dates:s.open_dates||[],
-    edit_unlock_dates:s.edit_unlock_dates||[],updated_at:new Date().toISOString()
+    edit_unlock_dates:s.edit_unlock_dates||[],employee_start_dates:s.employee_start_dates||{},
+    updated_at:new Date().toISOString()
   })}).then(function(){updateManagerLink(s);}).catch(function(){});
 }
 function updateManagerLink(s){
@@ -1489,7 +1490,7 @@ function _initApp(){
       setupManagerAppManifest(shortId, lnk.station_name); // تحديث الاسم في التطبيق باسم المحطة الصحيح بعد ما يوصل
       var todayLocked=lnk.used_date===todayISO;
       var stationId=Number((shortId.split('_')[0]))||null;
-      function boot(openDates,editDates){
+      function boot(openDates,editDates,startDates){
         setupMgrReminder(shortId,lnk.station_name,todayLocked);
         if(todayLocked && !openDates.length && !editDates.length){showLocked();return;}
         showMgr({
@@ -1498,17 +1499,19 @@ function _initApp(){
           employees:Array.isArray(lnk.employees)?lnk.employees:[],
           managerCode:lnk.manager_code||'',
           showManager:lnk.show_manager!==false,
-          stationId:stationId
+          stationId:stationId,
+          employeeStartDates:startDates||{}
         },shortId,openDates,todayLocked,editDates);
       }
       if(stationId){
-        sbGet('stations','id=eq.'+stationId+'&select=open_dates,edit_unlock_dates',function(sRows){
+        sbGet('stations','id=eq.'+stationId+'&select=open_dates,edit_unlock_dates,employee_start_dates',function(sRows){
           var od=(sRows&&sRows.length&&Array.isArray(sRows[0].open_dates))?sRows[0].open_dates.slice().sort():[];
           var ed=(sRows&&sRows.length&&Array.isArray(sRows[0].edit_unlock_dates))?sRows[0].edit_unlock_dates.slice().sort():[];
-          boot(od,ed);
+          var sd=(sRows&&sRows.length&&sRows[0].employee_start_dates)?sRows[0].employee_start_dates:{};
+          boot(od,ed,sd);
         });
       } else {
-        boot([],[]);
+        boot([],[],{});
       }
     });
   } else {
@@ -2520,20 +2523,30 @@ document.getElementById('confirmTransferBtn').addEventListener('click',function(
   btn.disabled=true;btn.textContent='جاري النقل...';
   sa.employees.splice(activeTransferEmpIdx,1);
   sb.employees.push(empName);
-  saveStation(sa); saveStation(sb);
+  saveStation(sa);
   sbRpc('transfer_employee_history',{
     p_old_station:sa.name,p_new_station:sb.name,p_new_manager:sb.manager,p_employee_name:empName
-  },function(movedCount,err){
+  },function(rows,err){
     btn.disabled=false;btn.textContent='نقل';
-    renderSt();
     document.getElementById('transferOv').classList.remove('open');
     if(err){
       toast('اتنقل الاسم في القايمة، لكن فشل نقل السجلات القديمة','warn');
       logAudit('نقل موظف (فشل نقل السجلات)',empName+': '+sa.name+' &larr; '+sb.name);
+      saveStation(sb); renderSt();
       return;
     }
-    logAudit('نقل موظف مع كامل تاريخه',empName+': '+sa.name+' &larr; '+sb.name+' - '+(movedCount||0)+' يوم');
-    toast('تم نقل "'+empName+'" لمحطة "'+sb.name+'" مع '+(movedCount||0)+' يوم من تاريخه الكامل','ok');
+    var row=(rows&&rows[0])||{};
+    var movedCount=row.moved_count||0;
+    var lastDateIso=row.last_date_iso||null;
+    // نمنع المحطة الجديدة تسجله في أي يوم كان هو أصلاً في المحطة القديمة وقتها
+    if(lastDateIso){
+      var cutoff=new Date(lastDateIso+'T00:00:00'); cutoff.setDate(cutoff.getDate()+1);
+      sb.employee_start_dates=sb.employee_start_dates||{};
+      sb.employee_start_dates[empName]=localISO(cutoff);
+    }
+    saveStation(sb); renderSt();
+    logAudit('نقل موظف مع كامل تاريخه',empName+': '+sa.name+' &larr; '+sb.name+' - '+movedCount+' يوم'+(lastDateIso?' (يبدأ من '+sb.employee_start_dates[empName]+')':''));
+    toast('تم نقل "'+empName+'" لمحطة "'+sb.name+'" مع '+movedCount+' يوم من تاريخه الكامل','ok');
   });
 });
 window._splitStation=function(sid){
@@ -2771,11 +2784,24 @@ function showMgrForm(info,lockKey,openDates,todayLocked,targetDate,editDates,edi
   if(isEditMode&&editRecord){
     (editRecord.employees||[]).forEach(function(e){if(people.indexOf(e.name)===-1)people.push(e.name);});
   }
+  // موظف منقول من محطة تانية: منمنعوش يتسجل هنا في يوم كان لسه في محطته القديمة وقتها
+  var excludedForCutoff=[];
+  if(!isToday&&!isEditMode&&info.employeeStartDates){
+    people=people.filter(function(name){
+      var cutoff=info.employeeStartDates[name];
+      if(cutoff&&targetDate<cutoff){excludedForCutoff.push(name);return false;}
+      return true;
+    });
+  }
   var total=people.length;
   var att={};
   var dateStr=isToday?
     new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'}):
     arDayLabel(targetDate)+(isEditMode?' (تعديل تقرير)':' (تسجيل متأخر)');
+  var cutoffNoteHTML=excludedForCutoff.length?
+    '<div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);color:var(--gold);'+
+    'border-radius:11px;padding:10px 14px;margin-bottom:12px;font-size:12.5px;font-weight:700;text-align:center">'+
+    '&#8505;&#65039; '+excludedForCutoff.join('، ')+' مش ظاهرين في اليوم ده لأنهم لسه ميكونوش انضموا للمحطة وقتها</div>':'';
 
   // ── تابات اختيار اليوم (لو فيه أيام سابقة مفتوحة للتسجيل أو للتعديل) ──
   var tabsHTML='';
@@ -2822,6 +2848,7 @@ function showMgrForm(info,lockKey,openDates,todayLocked,targetDate,editDates,edi
   document.getElementById('mgrBody').innerHTML=
     '<div class="mgr-wrap">'+
       tabsHTML+
+      cutoffNoteHTML+
       '<div class="ip">'+
         '<div class="ip-station">'+info.stationName+'</div>'+
         '<div class="ip-mgr">المدير: '+info.managerName+'</div>'+
@@ -2870,6 +2897,10 @@ function showMgrForm(info,lockKey,openDates,todayLocked,targetDate,editDates,edi
     var input=document.getElementById('newPersonInput');
     var name=input.value.trim();
     if(!name)return;
+    if(!isToday&&!isEditMode&&info.employeeStartDates&&info.employeeStartDates[name]&&targetDate<info.employeeStartDates[name]){
+      toast('"'+name+'" لسه ميكونش انضم للمحطة دي في اليوم ده، مينفعش يتسجل','err');
+      return;
+    }
     var addBtn=document.getElementById('addPersonBtn');
     addBtn.disabled=true;addBtn.textContent='جاري التحقق...';
     sbGet('stations','select=name,employees',function(allStations){
